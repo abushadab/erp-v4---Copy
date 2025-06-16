@@ -32,6 +32,15 @@ import {
   DropdownMenuCheckboxItem,
 } from "@/components/ui/dropdown-menu"
 import { 
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { Skeleton } from "@/components/ui/skeleton"
+import { 
   Plus, 
   Search, 
   Filter, 
@@ -104,10 +113,11 @@ export default function UsersPage() {
     id: '',
     name: '',
     email: '',
-    role: '',
+    role: 'manager',
     department: '',
-    status: '',
+    status: 'active',
     avatar: '',
+    joinDate: new Date().toISOString(),
     permissions: [] as string[]
   })
   const { toast, success, notifications, removeNotification } = useToast();
@@ -533,19 +543,19 @@ export default function UsersPage() {
   const getRoleColor = (role: string) => {
     switch (role) {
       case 'super_admin':
-        return 'bg-red-100 text-red-800'
+        return 'bg-red-50 text-red-700 border-red-200 hover:bg-red-50 hover:text-red-700'
       case 'admin':
-        return 'bg-purple-100 text-purple-800'
+        return 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-50 hover:text-purple-700'
       case 'manager':
-        return 'bg-blue-100 text-blue-800'
+        return 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-50 hover:text-blue-700'
       case 'sales':
-        return 'bg-green-100 text-green-800'
+        return 'bg-green-50 text-green-700 border-green-200 hover:bg-green-50 hover:text-green-700'
       case 'warehouse':
-        return 'bg-orange-100 text-orange-800'
+        return 'bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-50 hover:text-orange-700'
       case 'accountant':
-        return 'bg-yellow-100 text-yellow-800'
+        return 'bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-50 hover:text-yellow-700'
       default:
-        return 'bg-gray-100 text-gray-800'
+        return 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-50 hover:text-gray-700'
     }
   }
 
@@ -583,12 +593,103 @@ export default function UsersPage() {
   if (loading) {
     return (
       <div className="container mx-auto p-6">
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="flex items-center space-x-2">
-            <Loader2 className="h-6 w-6 animate-spin" />
-            <span>Loading users...</span>
+        {/* Header Skeleton */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <Skeleton className="h-8 w-48 mb-2" />
+            <Skeleton className="h-4 w-80" />
           </div>
+          <Skeleton className="h-10 w-32" />
         </div>
+
+        {/* Summary Cards Skeleton */}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Card key={i}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-4 w-4" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-8 w-12 mb-1" />
+                <Skeleton className="h-3 w-32" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* Filters Skeleton */}
+        <div className="flex flex-col sm:flex-row gap-4 mb-6">
+          <Skeleton className="h-10 flex-1" />
+          <Skeleton className="h-10 w-32" />
+          <Skeleton className="h-10 w-32" />
+        </div>
+
+        {/* Table Skeleton */}
+        <Card className="shadow-sm">
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>
+                      <Skeleton className="h-4 w-20" />
+                    </TableHead>
+                    <TableHead className="hidden md:table-cell">
+                      <Skeleton className="h-4 w-16" />
+                    </TableHead>
+                    <TableHead className="hidden sm:table-cell">
+                      <Skeleton className="h-4 w-16" />
+                    </TableHead>
+                    <TableHead className="hidden lg:table-cell">
+                      <Skeleton className="h-4 w-20" />
+                    </TableHead>
+                    <TableHead className="hidden lg:table-cell">
+                      <Skeleton className="h-4 w-20" />
+                    </TableHead>
+                    <TableHead className="text-right">
+                      <Skeleton className="h-4 w-16 ml-auto" />
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell>
+                        <div className="flex items-center space-x-3">
+                          <Skeleton className="h-10 w-10 rounded-full" />
+                          <div className="space-y-1">
+                            <Skeleton className="h-4 w-32" />
+                            <Skeleton className="h-3 w-48" />
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        <Skeleton className="h-6 w-20" />
+                      </TableCell>
+                      <TableCell className="hidden sm:table-cell">
+                        <Skeleton className="h-6 w-16" />
+                      </TableCell>
+                      <TableCell className="hidden lg:table-cell">
+                        <Skeleton className="h-4 w-24" />
+                      </TableCell>
+                      <TableCell className="hidden lg:table-cell">
+                        <Skeleton className="h-4 w-20" />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Skeleton className="h-8 w-8" />
+                          <Skeleton className="h-8 w-8" />
+                          <Skeleton className="h-8 w-8" />
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     )
   }
@@ -1071,12 +1172,11 @@ export default function UsersPage() {
                 </div>
               </div>
               <div className="flex items-center space-x-2 mb-4">
-                <Badge className={`${getRoleColor(selectedUser.role)}`} variant="outline">
-                  <span className="mr-1">{getRoleIcon(selectedUser.role)}</span> {selectedUser.role}
+                <Badge className={`${getRoleColor(selectedUser.role)}`}>
+                  {selectedUser.role}
                 </Badge>
                 <Badge variant={getStatusColor(selectedUser.status as 'active' | 'inactive' | 'pending')}>
-                  {getStatusIcon(selectedUser.status)}
-                  <span className="ml-1">{selectedUser.status}</span>
+                  {selectedUser.status}
                 </Badge>
               </div>
               <Alert variant="destructive">
@@ -1104,72 +1204,82 @@ export default function UsersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* User List */}
-      <div className="space-y-4">
+      {/* Users Table */}
+      <Card className="shadow-sm">
+        <CardContent className="p-0">
+          {filteredUsers.length > 0 ? (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>User</TableHead>
+                    <TableHead className="hidden md:table-cell">Role</TableHead>
+                    <TableHead className="hidden sm:table-cell">Status</TableHead>
+                    <TableHead className="hidden lg:table-cell">Department</TableHead>
+                    <TableHead className="hidden lg:table-cell">Last Login</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
         {filteredUsers.map((user) => (
-          <div key={user.id} className="flex items-center justify-between p-4 rounded-lg border hover:shadow-md transition-shadow bg-card">
-            <div className="flex items-center space-x-4">
-              {/* User Avatar */}
-              <div className="w-12 h-12 rounded-full bg-black flex items-center justify-center text-white font-semibold flex-shrink-0">
+                    <TableRow key={user.id} className="hover:bg-gray-50">
+                      <TableCell>
+                        <div className="flex items-center space-x-3">
+                          <div className="w-10 h-10 rounded-full bg-black flex items-center justify-center text-white font-semibold flex-shrink-0">
                 {user.avatar ? (
-                  <img src={user.avatar} alt={user.name} className="w-12 h-12 rounded-full" />
+                              <img src={user.avatar} alt={user.name} className="w-10 h-10 rounded-full" />
                 ) : (
                   user.name.charAt(0).toUpperCase()
                 )}
               </div>
-              
-              {/* User Info */}
-              <div className="flex flex-col">
-                <h3 className="font-medium">{user.name}</h3>
-                <div className="flex items-center text-sm text-muted-foreground">
+                          <div>
+                            <div className="font-medium">{user.name}</div>
+                            <div className="text-sm text-muted-foreground flex items-center">
                   <Mail className="h-3 w-3 mr-1" />
                   {user.email}
+                              <span className="sm:hidden ml-2">
+                                • {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
+                              </span>
                 </div>
-                
-                {/* Department and Join Date */}
-                <div className="flex items-center space-x-4 mt-1 text-xs text-muted-foreground">
-                  <div className="flex items-center">
-                    <Building className="h-3 w-3 mr-1" />
-                    {user.department}
                   </div>
-                  <div className="flex items-center">
-                    <Calendar className="h-3 w-3 mr-1" />
-                    Joined {formatJoinDate(user.joinDate)}
                   </div>
-                </div>
-              </div>
-            </div>
-            
-            {/* Middle section with badges */}
-            <div className="flex items-center space-x-2 mx-4">
-              <Badge className={`${getRoleColor(user.role)} hover:bg-opacity-100`}>
-                <span className="mr-1">{getRoleIcon(user.role)}</span>
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        <Badge className={`${getRoleColor(user.role)}`}>
                 {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
               </Badge>
+                      </TableCell>
+                      <TableCell className="hidden sm:table-cell">
               <Badge variant={getStatusColor(user.status)}>
-                {getStatusIcon(user.status)}
-                <span className="ml-1">{user.status}</span>
+                          {user.status}
               </Badge>
+                      </TableCell>
+                      <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
+                        <div className="flex items-center">
+                          <Building className="h-3 w-3 mr-1" />
+                          {user.department}
             </div>
-            
-            {/* Actions */}
-            <div className="flex items-center space-x-2">
+                      </TableCell>
+                      <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
+                        {formatLastLogin(user.lastLogin)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
               <Button 
                 variant="ghost" 
                 size="sm" 
-                className="h-8 w-8 p-0"
+                            className="cursor-pointer"
                 onClick={() => {
                   setSelectedUser(user);
                   setIsViewDialogOpen(true);
                 }}
               >
                 <Eye className="h-4 w-4" />
-                <span className="sr-only">View Details</span>
               </Button>
               <Button 
                 variant="ghost" 
                 size="sm" 
-                className="h-8 w-8 p-0"
+                            className="cursor-pointer"
                 onClick={() => {
                   setSelectedUser(user);
                   setEditUser({ 
@@ -1191,12 +1301,11 @@ export default function UsersPage() {
                 }
               >
                 <Edit className="h-4 w-4" />
-                <span className="sr-only">Edit User</span>
               </Button>
               <Button 
                 variant="ghost" 
                 size="sm" 
-                className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                            className="text-red-600 hover:text-red-800 cursor-pointer"
                 onClick={() => {
                   setSelectedUser(user);
                   setIsDeleteDialogOpen(true);
@@ -1212,35 +1321,37 @@ export default function UsersPage() {
                 }
               >
                 <Trash2 className="h-4 w-4" />
-                <span className="sr-only">Delete User</span>
               </Button>
             </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
           </div>
-        ))}
-
-        {/* No Results */}
-        {filteredUsers.length === 0 && (
-          <Card className="text-center py-8">
-            <CardContent>
-              <User className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+          ) : (
+            <div className="text-center py-12">
+              <User className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
               <h3 className="text-lg font-semibold mb-2">No users found</h3>
-              <p className="text-muted-foreground mb-4">
-                No users match your current search and filter criteria.
+              <p className="text-muted-foreground mb-6">
+                {searchTerm || selectedRoles.length < 6 || selectedStatuses.length < 3
+                  ? "Try adjusting your search or filters" 
+                  : "Get started by adding your first user"}
               </p>
               <Button 
                 variant="outline" 
                 onClick={() => {
                   setSearchTerm('')
                   setSelectedRoles(['super_admin', 'admin', 'manager', 'sales', 'warehouse', 'accountant'])
-                  setSelectedStatuses(['active'])
+                  setSelectedStatuses(['active', 'inactive', 'pending'])
                 }}
               >
                 Clear Filters
               </Button>
+            </div>
+          )}
             </CardContent>
           </Card>
-        )}
-      </div>
       
       {/* Toast Notifications */}
         {notifications.length > 0 && (

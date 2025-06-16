@@ -71,9 +71,9 @@ export default function SettingsPage() {
 
   const [general, setGeneral] = React.useState({
     companyName: "ERP Company Ltd",
-    timezone: "UTC-5",
-    dateFormat: "MM/DD/YYYY",
-    currency: "USD",
+    timezone: "Asia/Dhaka",
+    dateFormat: "DD/MM/YYYY",
+    currency: "BDT",
     language: "en"
   })
 
@@ -172,9 +172,9 @@ export default function SettingsPage() {
           // Reset all settings to defaults
           setGeneral({
             companyName: "ERP Company Ltd",
-            timezone: "UTC-5",
-            dateFormat: "MM/DD/YYYY",
-            currency: "USD",
+            timezone: "Asia/Dhaka",
+            dateFormat: "DD/MM/YYYY",
+            currency: "BDT",
             language: "en"
           })
           setNotifications({
@@ -360,6 +360,7 @@ export default function SettingsPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="BDT">BDT - Bangladeshi Taka</SelectItem>
                       <SelectItem value="USD">USD - US Dollar</SelectItem>
                       <SelectItem value="EUR">EUR - Euro</SelectItem>
                       <SelectItem value="GBP">GBP - British Pound</SelectItem>

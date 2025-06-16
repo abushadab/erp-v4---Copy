@@ -32,6 +32,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { Skeleton } from "@/components/ui/skeleton"
 import { 
   Plus, 
   Search, 
@@ -611,11 +620,69 @@ export default function RolesPage() {
   
   if (loading) {
     return (
-      <div className="container mx-auto p-6">
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin" />
-          <span className="ml-2">Loading roles and permissions...</span>
+      <div className="container mx-auto p-6 space-y-6">
+        {/* Header Skeleton */}
+        <div className="flex items-center justify-between">
+          <div>
+            <Skeleton className="h-8 w-48 mb-2" />
+            <Skeleton className="h-4 w-80" />
+          </div>
+          <Skeleton className="h-10 w-32" />
         </div>
+
+        {/* Search Skeleton */}
+        <div className="flex items-center space-x-2">
+          <Skeleton className="h-10 flex-1 max-w-md" />
+        </div>
+
+        {/* Table Skeleton */}
+        <Card>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead><Skeleton className="h-4 w-20" /></TableHead>
+                    <TableHead className="hidden sm:table-cell"><Skeleton className="h-4 w-12" /></TableHead>
+                    <TableHead className="hidden md:table-cell"><Skeleton className="h-4 w-20" /></TableHead>
+                    <TableHead className="hidden lg:table-cell"><Skeleton className="h-4 w-16" /></TableHead>
+                    <TableHead className="text-right"><Skeleton className="h-4 w-16 ml-auto" /></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell>
+                        <div className="flex items-center space-x-3">
+                          <Skeleton className="h-10 w-10 rounded-full" />
+                          <div className="space-y-1">
+                            <Skeleton className="h-4 w-32" />
+                            <Skeleton className="h-3 w-48" />
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="hidden sm:table-cell">
+                        <Skeleton className="h-6 w-16" />
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        <Skeleton className="h-4 w-20" />
+                      </TableCell>
+                      <TableCell className="hidden lg:table-cell">
+                        <Skeleton className="h-4 w-20" />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Skeleton className="h-8 w-8" />
+                          <Skeleton className="h-8 w-8" />
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     )
   }
@@ -725,98 +792,124 @@ export default function RolesPage() {
         </div>
       </div>
       
-      {/* Roles List */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Roles</CardTitle>
-          <CardDescription>
-            Manage system roles and their permissions
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {filteredRoles.length === 0 ? (
-            <div className="text-center py-8">
-              <Shield className="mx-auto h-12 w-12 text-muted-foreground" />
-              <h3 className="mt-2 text-sm font-semibold text-muted-foreground">No roles found</h3>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {searchTerm ? 'Try adjusting your search terms.' : 'Get started by creating a new role.'}
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {filteredRoles.map((role) => (
-                <div key={role.id} className="flex items-center justify-between p-4 border rounded-lg">
-                  <div className="flex items-center space-x-4">
-                    <div className="flex-shrink-0">
-                      <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                        <Shield className="h-5 w-5 text-primary" />
-                      </div>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center space-x-2">
-                        <h3 className="text-sm font-medium text-gray-900 capitalize">{role.name}</h3>
+      {/* Roles Table */}
+      <Card className="shadow-sm">
+        <CardContent className="p-0">
+          {filteredRoles.length > 0 ? (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Role</TableHead>
+                    <TableHead className="hidden sm:table-cell">Status</TableHead>
+                    <TableHead className="hidden md:table-cell">Permissions</TableHead>
+                    <TableHead className="hidden lg:table-cell">Created</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredRoles.map((role) => (
+                    <TableRow key={role.id} className="hover:bg-gray-50">
+                      <TableCell>
+                        <div className="flex items-center space-x-3">
+                          <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
+                            <Shield className="h-5 w-5 text-primary" />
+                          </div>
+                          <div>
+                            <div className="font-medium capitalize">{role.name}</div>
+                            <div className="text-sm text-muted-foreground">
+                              {role.description}
+                              <span className="sm:hidden ml-2">
+                                • {role.status}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="hidden sm:table-cell">
                         <Badge className={getStatusColor(role.status)} variant="outline">
                           {getStatusIcon(role.status)}
                           <span className="ml-1">{role.status}</span>
                         </Badge>
-                      </div>
-                      <p className="text-sm text-muted-foreground">{role.description}</p>
-                      <div className="flex items-center space-x-4 mt-1 text-xs text-muted-foreground">
-                        <span>{(rolePermissions[role.id] || []).length} permissions</span>
-                        <span>Created {new Date(role.created_at).toLocaleDateString()}</span>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center space-x-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => openViewDialog(role)}
-                    >
-                      <Eye className="h-4 w-4" />
-                    </Button>
-                    
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem 
-                          onClick={() => openEditDialog(role)}
-                          disabled={role.name.toLowerCase() === 'administrator' || role.name.toLowerCase() === 'super admin'}
-                          title={(role.name.toLowerCase() === 'administrator' || role.name.toLowerCase() === 'super admin') ? `${role.name} role cannot be edited` : undefined}
-                        >
-                          <Edit className="mr-2 h-4 w-4" />
-                          Edit Role
-                        </DropdownMenuItem>
-                        <DropdownMenuItem 
-                          onClick={() => openPermissionsDialog(role)}
-                          disabled={role.name.toLowerCase() === 'administrator' || role.name.toLowerCase() === 'super admin'}
-                          title={(role.name.toLowerCase() === 'administrator' || role.name.toLowerCase() === 'super admin') ? `${role.name} permissions cannot be managed` : undefined}
-                        >
-                          <Settings className="mr-2 h-4 w-4" />
-                          Manage Permissions
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem 
-                          onClick={() => openDeleteDialog(role)}
-                          className="text-red-600"
-                          disabled={role.name.toLowerCase() === 'administrator' || role.name.toLowerCase() === 'super admin'}
-                          title={(role.name.toLowerCase() === 'administrator' || role.name.toLowerCase() === 'super admin') ? `${role.name} role cannot be deleted` : undefined}
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete Role
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </div>
-              ))}
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        <div className="text-sm">
+                          <span className="font-medium">{(rolePermissions[role.id] || []).length}</span>
+                          <span className="text-muted-foreground ml-1">permissions</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
+                        {new Date(role.created_at).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => openViewDialog(role)}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem 
+                                onClick={() => openEditDialog(role)}
+                                disabled={role.name.toLowerCase() === 'administrator' || role.name.toLowerCase() === 'super admin'}
+                                title={(role.name.toLowerCase() === 'administrator' || role.name.toLowerCase() === 'super admin') ? `${role.name} role cannot be edited` : undefined}
+                              >
+                                <Edit className="mr-2 h-4 w-4" />
+                                Edit Role
+                              </DropdownMenuItem>
+                              <DropdownMenuItem 
+                                onClick={() => openPermissionsDialog(role)}
+                                disabled={role.name.toLowerCase() === 'administrator' || role.name.toLowerCase() === 'super admin'}
+                                title={(role.name.toLowerCase() === 'administrator' || role.name.toLowerCase() === 'super admin') ? `${role.name} permissions cannot be managed` : undefined}
+                              >
+                                <Settings className="mr-2 h-4 w-4" />
+                                Manage Permissions
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem 
+                                onClick={() => openDeleteDialog(role)}
+                                className="text-red-600"
+                                disabled={role.name.toLowerCase() === 'administrator' || role.name.toLowerCase() === 'super admin'}
+                                title={(role.name.toLowerCase() === 'administrator' || role.name.toLowerCase() === 'super admin') ? `${role.name} role cannot be deleted` : undefined}
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Delete Role
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <div className="text-center py-12">
+              <Shield className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+              <h3 className="text-lg font-semibold mb-2">No roles found</h3>
+              <p className="text-muted-foreground text-center mb-4">
+                {searchTerm ? 'Try adjusting your search terms.' : 'Get started by creating a new role.'}
+              </p>
+              <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Role
+                  </Button>
+                </DialogTrigger>
+              </Dialog>
             </div>
           )}
         </CardContent>

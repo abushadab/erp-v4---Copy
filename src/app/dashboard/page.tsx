@@ -7,47 +7,319 @@ import { AnimatedCard } from "@/components/animations/animated-card"
 import { AnimatedButton } from "@/components/animations/animated-button"
 import { StaggerContainer, StaggerItem } from "@/components/animations/stagger-container"
 import { PageWrapper } from "@/components/animations/page-wrapper"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
+import { Skeleton } from "@/components/ui/skeleton"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { 
   Plus, 
   TrendingUp, 
   TrendingDown, 
-  Users, 
+  ShoppingCart,
+  CreditCard,
+  Receipt,
+  Building2,
+  CalendarDays,
   Package, 
-  DollarSign,
-  AlertTriangle,
-  Eye,
-  Edit,
-  MoreHorizontal
+  Users
 } from "lucide-react"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { 
-  mockProducts, 
-  mockSales, 
-  mockReturns, 
-  mockCustomers 
-} from "@/lib/mock-data/erp-data"
+
+// Import Supabase query functions
+import { getPurchaseStats } from "@/lib/supabase/purchases"
+import { getExpenses } from "@/lib/supabase/expenses-client"
+import { getFinancialSummary } from "@/lib/supabase/accounts-client"
+import { createClient } from "@/lib/supabase/client"
+
+// Global cache and request deduplication
+let globalCache: {
+  data?: {
+    sales?: any
+    expenses?: any 
+    purchases?: any
+    financial?: any
+  }
+  lastFetch?: number
+  isLoading?: boolean
+  loadingPromise?: Promise<any>
+} = {}
+
+const CACHE_DURATION = 30 * 1000 // 30 seconds
+
+// Request deduplication: ensure only one set of API calls at a time
+const getDashboardData = async () => {
+  const now = Date.now()
+  
+  // Return cached data if valid
+  if (globalCache.data && globalCache.lastFetch && (now - globalCache.lastFetch) < CACHE_DURATION) {
+    console.log('📋 Using cached dashboard data')
+    return globalCache.data
+  }
+  
+  // If already loading, return the existing promise
+  if (globalCache.isLoading && globalCache.loadingPromise) {
+    console.log('⏳ Dashboard data already loading, waiting for existing request...')
+    return globalCache.loadingPromise
+  }
+  
+  // Start fresh loading
+  globalCache.isLoading = true
+  globalCache.loadingPromise = Promise.all([
+    getSalesStats().catch((err: any) => {
+      console.error('Sales stats error:', err)
+      return null
+    }),
+    getPurchaseStats().catch((err: any) => {
+      console.error('Purchase stats error:', err) 
+      return null
+    }),
+    getExpenseStats().catch((err: any) => {
+      console.error('Expense stats error:', err)
+      return null
+    }),
+    getFinancialSummary().catch((err: any) => {
+      console.error('Financial summary error:', err)
+      return null
+    })
+  ]).then(([salesData, purchasesData, expensesData, financialData]) => {
+    const result = {
+      sales: salesData,
+      purchases: purchasesData, 
+      expenses: expensesData,
+      financial: financialData
+    }
+    
+    // Cache the result
+    globalCache.data = result
+    globalCache.lastFetch = now
+    globalCache.isLoading = false
+    globalCache.loadingPromise = undefined
+    
+    console.log('✅ Dashboard data loaded and cached')
+    return result
+  }).catch((error) => {
+    globalCache.isLoading = false
+    globalCache.loadingPromise = undefined
+    throw error
+  })
+  
+  return globalCache.loadingPromise
+}
+
+// Create fixed sales stats function that only uses existing fields
+const getSalesStats = async () => {
+  const supabase = createClient()
+  
+  try {
+    const { data: sales, error } = await supabase
+      .from('sales')
+      .select('total_amount, profit, status, sale_date')
+
+    if (error) throw error
+
+    const totalRevenue = sales.reduce((sum, sale) => sum + parseFloat(sale.total_amount || 0), 0)
+    const totalProfit = sales.reduce((sum, sale) => sum + parseFloat(sale.profit || 0), 0)
+    const completedSales = sales.filter(sale => sale.status === 'completed').length
+    const totalSales = sales.length
+
+    return {
+      totalRevenue,
+      totalProfit,
+      completedSales,
+      totalSales
+    }
+  } catch (error) {
+    console.error('Error fetching sales stats:', error)
+    throw error
+  }
+}
+
+// Create a simple stats function for expenses
+const getExpenseStats = async () => {
+  const expenses = await getExpenses()
+  const totalExpenses = expenses.reduce((sum, expense) => sum + (expense.amount || 0), 0)
+  
+  // Group by type
+  const expensesByType = expenses.reduce((acc, expense) => {
+    const typeName = expense.expense_type_name || 'Unknown'
+    if (!acc[typeName]) {
+      acc[typeName] = 0
+    }
+    acc[typeName] += expense.amount || 0
+    return acc
+  }, {} as Record<string, number>)
+  
+  return {
+    totalExpenses,
+    currentMonthTotal: totalExpenses, // For now, same as total
+    totalTransactions: expenses.length,
+    expensesByType
+  }
+}
+
+// Types
+interface DashboardStats {
+  sales: {
+    totalRevenue: number
+    totalProfit: number
+    totalSales: number
+    completedSales: number
+  } | null
+  purchases: {
+    totalPurchases: number
+    totalAmount: number
+    pendingPurchases: number
+    receivedPurchases: number
+  } | null
+  expenses: {
+    totalExpenses: number
+    currentMonthTotal: number
+    totalTransactions: number
+    expensesByType: Record<string, number>
+  } | null
+  financial: {
+    totalAssets: number
+    totalLiabilities: number
+    totalRevenue: number
+    totalExpenses: number
+    netIncome: number
+  } | null
+}
 
 export default function DashboardPage() {
-  const [products] = React.useState(mockProducts)
-  const [sales] = React.useState(mockSales)
-  const [returns] = React.useState(mockReturns)
-  const [customers] = React.useState(mockCustomers)
+  const [loading, setLoading] = React.useState(true)
+  const [stats, setStats] = React.useState<DashboardStats>({
+    sales: null,
+    purchases: null,
+    expenses: null,
+    financial: null
+  })
+  const [timePeriod, setTimePeriod] = React.useState<'today' | 'week' | 'month'>('month')
+  const [refreshing, setRefreshing] = React.useState(false)
+  
+  // Add ref to prevent duplicate calls
+  const loadingRef = React.useRef(false)
+  const dataLoadedRef = React.useRef(false)
 
-  // Calculate dashboard statistics
-  const totalRevenue = sales.reduce((acc, sale) => acc + sale.totalAmount, 0)
-  const totalCustomers = customers.length
-  const totalProducts = products.length
-  const totalSales = sales.length
-  const lowStockProducts = products.filter(product => product.stock <= 10)
-  const recentSales = sales.slice(0, 5)
-  const recentReturns = returns.slice(0, 3)
+  // Load dashboard data with duplicate call prevention
+  const loadDashboardData = React.useCallback(async () => {
+    // Prevent duplicate calls
+    if (loadingRef.current) {
+      console.log('🔄 Dashboard data loading already in progress, skipping...')
+      return
+    }
+
+    try {
+      loadingRef.current = true
+      setLoading(true)
+      console.log('🔄 Loading dashboard data...')
+
+      // Use the new deduplicating function
+      const dashboardData = await getDashboardData()
+
+      setStats(dashboardData)
+      dataLoadedRef.current = true
+      console.log('✅ Dashboard data loaded successfully')
+    } catch (error) {
+      console.error('Dashboard data loading failed:', error)
+    } finally {
+      setLoading(false)
+      loadingRef.current = false
+    }
+  }, [])
+
+  // Clear cache function
+  const clearCache = () => {
+    globalCache = {}
+    console.log('🗑️ Cache cleared')
+  }
+
+  // Refresh data
+  const handleRefresh = React.useCallback(async () => {
+    setRefreshing(true)
+    clearCache() // Clear cache to force fresh data
+    dataLoadedRef.current = false // Reset to allow fresh load
+    await loadDashboardData()
+    setRefreshing(false)
+  }, [loadDashboardData])
+
+  // Load data on mount - with duplicate prevention
+  React.useEffect(() => {
+    if (!dataLoadedRef.current && !loadingRef.current) {
+      loadDashboardData()
+    }
+  }, [])
+
+  // Calculate metrics based on time period
+  const getMetricsForPeriod = () => {
+    if (!stats.sales || !stats.purchases || !stats.expenses || !stats.financial) return null
+
+    // For now, we'll show all-time data since we don't have date filtering in the queries yet
+    // This can be enhanced later with date-based filtering
+    return {
+      revenue: stats.sales.totalRevenue,
+      profit: stats.sales.totalProfit,
+      expenses: stats.expenses.totalExpenses,
+      netIncome: stats.financial.netIncome,
+      salesCount: stats.sales.totalSales,
+      purchasesCount: stats.purchases.totalPurchases,
+      expensesCount: stats.expenses.totalTransactions
+    }
+  }
+
+  const metrics = getMetricsForPeriod()
+
+  const LoadingSkeleton = () => (
+    <PageWrapper>
+      <div className="flex-1 space-y-6 p-6">
+        {/* Header Skeleton */}
+        <div className="flex items-center justify-between">
+          <div>
+            <Skeleton className="h-8 w-48 mb-2" />
+            <Skeleton className="h-4 w-96" />
+          </div>
+          <div className="flex items-center space-x-2">
+            <Skeleton className="h-10 w-32" />
+            <Skeleton className="h-10 w-32" />
+          </div>
+        </div>
+
+        {/* Stats Cards Skeleton */}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="p-6 border rounded-lg">
+              <div className="flex items-center justify-between mb-2">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-4 w-4" />
+              </div>
+              <Skeleton className="h-8 w-20 mb-2" />
+              <Skeleton className="h-3 w-32" />
+            </div>
+          ))}
+        </div>
+
+        {/* Charts Skeleton */}
+        <div className="grid gap-6 md:grid-cols-2">
+          <div className="p-6 border rounded-lg">
+            <Skeleton className="h-6 w-32 mb-4" />
+            <Skeleton className="h-64 w-full" />
+          </div>
+          <div className="p-6 border rounded-lg">
+            <Skeleton className="h-6 w-32 mb-4" />
+            <Skeleton className="h-64 w-full" />
+          </div>
+        </div>
+      </div>
+    </PageWrapper>
+  )
+
+  if (loading) {
+    return <LoadingSkeleton />
+  }
 
   return (
     <PageWrapper>
@@ -59,79 +331,112 @@ export default function DashboardPage() {
               <div>
                 <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
                 <p className="text-muted-foreground">
-                  Welcome back! Here's what's happening with your business today.
+                  Your business overview for {timePeriod === 'today' ? 'today' : timePeriod === 'week' ? 'this week' : 'this month'}
                 </p>
               </div>
-              <AnimatedButton>
+              <div className="flex items-center space-x-2">
+                <Select value={timePeriod} onValueChange={(value: 'today' | 'week' | 'month') => setTimePeriod(value)}>
+                  <SelectTrigger className="w-32">
+                    <CalendarDays className="mr-2 h-4 w-4" />
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="today">Today</SelectItem>
+                    <SelectItem value="week">This Week</SelectItem>
+                    <SelectItem value="month">This Month</SelectItem>
+                  </SelectContent>
+                </Select>
+                <AnimatedButton 
+                  variant="outline" 
+                  onClick={handleRefresh}
+                  disabled={refreshing}
+                >
+                  {refreshing ? (
+                    <div className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full mr-2" />
+                  ) : (
                 <Plus className="mr-2 h-4 w-4" />
-                Quick Actions
+                  )}
+                  Refresh
               </AnimatedButton>
+              </div>
             </div>
           </StaggerItem>
         </StaggerContainer>
 
-        {/* Statistics Cards */}
+        {/* Key Metrics Cards */}
         <StaggerContainer delay={0.05}>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {/* Total Revenue */}
             <StaggerItem>
               <AnimatedCard>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-                  <DollarSign className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">${totalRevenue.toLocaleString()}</div>
-                  <p className="text-xs text-muted-foreground">
-                    <TrendingUp className="inline h-3 w-3 text-green-500 mr-1" />
-                    +20.1% from last month
-                  </p>
-                </CardContent>
-              </AnimatedCard>
-            </StaggerItem>
-
-            <StaggerItem>
-              <AnimatedCard>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Customers</CardTitle>
-                  <Users className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{totalCustomers}</div>
-                  <p className="text-xs text-muted-foreground">
-                    <TrendingUp className="inline h-3 w-3 text-green-500 mr-1" />
-                    +12.5% from last month
-                  </p>
-                </CardContent>
-              </AnimatedCard>
-            </StaggerItem>
-
-            <StaggerItem>
-              <AnimatedCard>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Products</CardTitle>
-                  <Package className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{totalProducts}</div>
-                  <p className="text-xs text-muted-foreground">
-                    <TrendingUp className="inline h-3 w-3 text-green-500 mr-1" />
-                    +5.2% from last month
-                  </p>
-                </CardContent>
-              </AnimatedCard>
-            </StaggerItem>
-
-            <StaggerItem>
-              <AnimatedCard>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Sales</CardTitle>
                   <TrendingUp className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{totalSales}</div>
+                  <div className="text-2xl font-bold">
+                    ৳{metrics ? metrics.revenue.toLocaleString() : '0'}
+                  </div>
                   <p className="text-xs text-muted-foreground">
-                    <TrendingDown className="inline h-3 w-3 text-red-500 mr-1" />
-                    -2.1% from last month
+                    <TrendingUp className="inline h-3 w-3 text-green-500 mr-1" />
+                    From {stats.sales?.totalSales || 0} sales
+                  </p>
+                </CardContent>
+              </AnimatedCard>
+            </StaggerItem>
+
+            {/* Total Profit */}
+            <StaggerItem>
+              <AnimatedCard>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Net Income</CardTitle>
+                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    ৳{metrics ? metrics.netIncome.toLocaleString() : '0'}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    <TrendingUp className="inline h-3 w-3 text-green-500 mr-1" />
+                    Revenue - Expenses
+                  </p>
+                </CardContent>
+              </AnimatedCard>
+            </StaggerItem>
+
+            {/* Total Purchases */}
+            <StaggerItem>
+              <AnimatedCard>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Purchases</CardTitle>
+                  <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    ৳{stats.purchases ? stats.purchases.totalAmount.toLocaleString() : '0'}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    <Package className="inline h-3 w-3 text-blue-500 mr-1" />
+                    {stats.purchases?.totalPurchases || 0} purchase orders
+                  </p>
+                </CardContent>
+              </AnimatedCard>
+            </StaggerItem>
+
+            {/* Total Expenses */}
+            <StaggerItem>
+              <AnimatedCard>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Expenses</CardTitle>
+                  <Receipt className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    ৳{stats.expenses ? stats.expenses.totalExpenses.toLocaleString() : '0'}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    <CreditCard className="inline h-3 w-3 text-red-500 mr-1" />
+                    {stats.expenses?.totalTransactions || 0} transactions
                   </p>
                 </CardContent>
               </AnimatedCard>
@@ -139,170 +444,155 @@ export default function DashboardPage() {
           </div>
         </StaggerContainer>
 
-        {/* Low Stock Alert */}
-        {lowStockProducts.length > 0 && (
+        {/* Financial Summary */}
           <StaggerContainer delay={0.1}>
-            <StaggerItem>
-              <Alert className="border-orange-200 bg-orange-50">
-                <AlertTriangle className="h-4 w-4 text-orange-600" />
-                <AlertTitle className="text-orange-800">Low Stock Alert</AlertTitle>
-                <AlertDescription className="text-orange-700">
-                  {lowStockProducts.length} products are running low on stock. 
-                  <AnimatedButton variant="link" className="p-0 h-auto ml-1 text-orange-800">
-                    View products
-                  </AnimatedButton>
-                </AlertDescription>
-              </Alert>
-            </StaggerItem>
-          </StaggerContainer>
-        )}
-
-        <div className="grid gap-6 md:grid-cols-2">
-          {/* Recent Sales */}
-          <StaggerContainer delay={0.15}>
+          <div className="grid gap-6 md:grid-cols-3">
+            {/* Assets */}
             <StaggerItem>
               <AnimatedCard>
                 <CardHeader>
-                  <CardTitle>Recent Sales</CardTitle>
-                  <CardDescription>Latest sales transactions</CardDescription>
+                  <CardTitle className="flex items-center">
+                    <Building2 className="mr-2 h-5 w-5" />
+                    Total Assets
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
-                    {recentSales.map((sale, index) => (
-                      <StaggerContainer key={sale.id} delay={0.05}>
+                  <div className="text-3xl font-bold text-green-600">
+                    ৳{stats.financial ? stats.financial.totalAssets.toLocaleString() : '0'}
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    Resources owned by the business
+                  </p>
+                </CardContent>
+              </AnimatedCard>
+            </StaggerItem>
+
+            {/* Liabilities */}
+            <StaggerItem>
+              <AnimatedCard>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <CreditCard className="mr-2 h-5 w-5" />
+                    Total Liabilities
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold text-red-600">
+                    ৳{stats.financial ? stats.financial.totalLiabilities.toLocaleString() : '0'}
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    Debts and obligations
+                  </p>
+                </CardContent>
+              </AnimatedCard>
+            </StaggerItem>
+
+            {/* Net Worth */}
                         <StaggerItem>
-                          <div className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors">
-                            <div className="space-y-1">
-                              <p className="text-sm font-medium">Sale #{sale.id}</p>
-                                                             <p className="text-xs text-muted-foreground">
-                                 {sale.customerName} • {sale.date}
-                               </p>
+              <AnimatedCard>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <TrendingUp className="mr-2 h-5 w-5" />
+                    Net Worth
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-3xl font-bold text-blue-600">
+                    ৳{stats.financial ? (stats.financial.totalAssets - stats.financial.totalLiabilities).toLocaleString() : '0'}
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-2">
+                    Assets minus liabilities
+                  </p>
+                </CardContent>
+              </AnimatedCard>
+            </StaggerItem>
+          </div>
+        </StaggerContainer>
+
+        {/* Module Status */}
+        <StaggerContainer delay={0.15}>
+          <div className="grid gap-6 md:grid-cols-2">
+            {/* Sales Overview */}
+            <StaggerItem>
+              <AnimatedCard>
+                <CardHeader>
+                  <CardTitle>Sales Overview</CardTitle>
+                  <CardDescription>Sales performance summary</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Total Sales</span>
+                    <Badge variant="default">{stats.sales?.totalSales || 0}</Badge>
                              </div>
-                             <div className="flex items-center space-x-2">
-                               <div className="text-right">
-                                 <div className="text-sm font-medium">${sale.totalAmount.toFixed(2)}</div>
-                                <Badge variant={sale.status === 'completed' ? 'default' : 'secondary'}>
-                                  {sale.status}
-                                </Badge>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Completed</span>
+                    <Badge variant="default">{stats.sales?.completedSales || 0}</Badge>
                               </div>
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="sm">
-                                    <MoreHorizontal className="h-4 w-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent>
-                                  <DropdownMenuItem>
-                                    <Eye className="mr-2 h-4 w-4" />
-                                    View Details
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem>
-                                    <Edit className="mr-2 h-4 w-4" />
-                                    Edit Sale
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Total Revenue</span>
+                    <span className="font-medium">৳{stats.sales ? stats.sales.totalRevenue.toLocaleString() : '0'}</span>
                             </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Total Profit</span>
+                    <span className="font-medium text-green-600">৳{stats.sales ? stats.sales.totalProfit.toLocaleString() : '0'}</span>
                           </div>
+                </CardContent>
+              </AnimatedCard>
                         </StaggerItem>
-                      </StaggerContainer>
-                    ))}
+
+            {/* Purchases Overview */}
+            <StaggerItem>
+              <AnimatedCard>
+                <CardHeader>
+                  <CardTitle>Purchases Overview</CardTitle>
+                  <CardDescription>Purchase orders summary</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Total Orders</span>
+                    <Badge variant="default">{stats.purchases?.totalPurchases || 0}</Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Pending</span>
+                    <Badge variant="outline">{stats.purchases?.pendingPurchases || 0}</Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Received</span>
+                    <Badge variant="default">{stats.purchases?.receivedPurchases || 0}</Badge>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Total Amount</span>
+                    <span className="font-medium">৳{stats.purchases ? stats.purchases.totalAmount.toLocaleString() : '0'}</span>
                   </div>
                 </CardContent>
               </AnimatedCard>
             </StaggerItem>
+          </div>
           </StaggerContainer>
 
-          {/* Recent Returns */}
+        {/* Expense Breakdown */}
+        {stats.expenses?.expensesByType && Object.keys(stats.expenses.expensesByType).length > 0 && (
           <StaggerContainer delay={0.2}>
             <StaggerItem>
               <AnimatedCard>
                 <CardHeader>
-                  <CardTitle>Recent Returns</CardTitle>
-                  <CardDescription>Items returned by customers</CardDescription>
+                  <CardTitle>Expense Breakdown</CardTitle>
+                  <CardDescription>Expenses by category</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-4">
-                    {recentReturns.map((returnItem, index) => (
-                      <StaggerContainer key={returnItem.id} delay={0.05}>
-                        <StaggerItem>
-                          <div className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors">
-                            <div className="space-y-1">
-                              <p className="text-sm font-medium">Return #{returnItem.id}</p>
-                                                             <p className="text-xs text-muted-foreground">
-                                 {returnItem.customerName} • {returnItem.date}
-                               </p>
-                             </div>
-                             <div className="flex items-center space-x-2">
-                               <div className="text-right">
-                                 <div className="text-sm font-medium">${returnItem.totalAmount.toFixed(2)}</div>
-                                <Badge variant={
-                                  returnItem.status === 'approved' ? 'default' :
-                                  returnItem.status === 'pending' ? 'secondary' : 'destructive'
-                                }>
-                                  {returnItem.status}
-                                </Badge>
-                              </div>
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="sm">
-                                    <MoreHorizontal className="h-4 w-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent>
-                                  <DropdownMenuItem>
-                                    <Eye className="mr-2 h-4 w-4" />
-                                    View Details
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem>
-                                    <Edit className="mr-2 h-4 w-4" />
-                                    Process Return
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </div>
+                  <div className="space-y-3">
+                    {Object.entries(stats.expenses.expensesByType).map(([type, amount]) => (
+                      <div key={type} className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">{type}</span>
+                        <span className="font-medium">৳{amount.toLocaleString()}</span>
                           </div>
-                        </StaggerItem>
-                      </StaggerContainer>
                     ))}
                   </div>
                 </CardContent>
               </AnimatedCard>
             </StaggerItem>
           </StaggerContainer>
-        </div>
-
-        {/* Quick Actions */}
-        <StaggerContainer delay={0.25}>
-          <StaggerItem>
-            <AnimatedCard>
-              <CardHeader>
-                <CardTitle>Quick Actions</CardTitle>
-                <CardDescription>Common tasks and shortcuts</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-                  <AnimatedButton variant="outline" className="h-20 flex-col">
-                    <Plus className="h-6 w-6 mb-2" />
-                    Add Product
-                  </AnimatedButton>
-                  <AnimatedButton variant="outline" className="h-20 flex-col">
-                    <DollarSign className="h-6 w-6 mb-2" />
-                    New Sale
-                  </AnimatedButton>
-                  <AnimatedButton variant="outline" className="h-20 flex-col">
-                    <TrendingDown className="h-6 w-6 mb-2" />
-                    Process Return
-                  </AnimatedButton>
-                  <AnimatedButton variant="outline" className="h-20 flex-col">
-                    <Users className="h-6 w-6 mb-2" />
-                    Add Customer
-                  </AnimatedButton>
-                </div>
-              </CardContent>
-            </AnimatedCard>
-          </StaggerItem>
-        </StaggerContainer>
+        )}
       </div>
     </PageWrapper>
   )
