@@ -25,7 +25,7 @@ import { getReturns, getReturnsBySaleId, getSaleById, type ReturnWithItems } fro
 import { apiCache } from "@/lib/supabase/cache"
 import { toast } from "sonner"
 
-export default function ReturnsPage() {
+function ReturnsPageContent() {
   const searchParams = useSearchParams()
   const [returns, setReturns] = React.useState<ReturnWithItems[]>([])
   const [loading, setLoading] = React.useState(true)
@@ -388,4 +388,12 @@ export default function ReturnsPage() {
       )}
     </div>
   )
-} 
+}
+
+export default function ReturnsPage() {
+  return (
+    <React.Suspense fallback={<div>Loading...</div>}>
+      <ReturnsPageContent />
+    </React.Suspense>
+  )
+}

@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -26,7 +26,6 @@ import {
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -38,17 +37,12 @@ import {
   Plus, 
   Search, 
   Filter, 
-  Eye, 
-  Edit,
   DollarSign,
   TrendingUp,
   TrendingDown,
-  Calendar,
-  User,
   Building,
   CreditCard,
   Banknote,
-
   Loader2,
   RefreshCw
 } from "lucide-react"
@@ -81,7 +75,7 @@ const dataCache = {
 }
 
 // Function to clear cache (can be called from other pages)
-export const clearAccountsCache = () => {
+const clearAccountsCache = () => {
   dataCache.accounts = null
   dataCache.categories = null
   dataCache.financialSummary = null

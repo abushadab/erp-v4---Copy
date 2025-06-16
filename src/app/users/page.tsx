@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -11,7 +11,7 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
+  SelectValue
 } from "@/components/ui/select"
 import {
   Dialog,
@@ -19,17 +19,15 @@ import {
   DialogDescription,
   DialogFooter,
   DialogHeader,
-  DialogTitle,
-  DialogTrigger,
+  DialogTitle
 } from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  DropdownMenuCheckboxItem,
+  DropdownMenuCheckboxItem
 } from "@/components/ui/dropdown-menu"
 import { 
   Table,
@@ -37,27 +35,20 @@ import {
   TableCell,
   TableHead,
   TableHeader,
-  TableRow,
+  TableRow
 } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
 import { 
   Plus, 
-  Search, 
-  Filter, 
-  Eye, 
-  Edit,
-  Trash2,
-  User,
-  UserCheck,
-  UserX,
+  Search,
+  Trash2CheckX,
   Shield,
-  Calendar,
   Mail,
   Building,
   Loader2,
   AlertCircle
 } from "lucide-react"
-import { mockUsers, type User as UserType } from "@/lib/mock-data/erp-data"
+import { type User as UserType } from "@/lib/mock-data/erp-data"
 import { getAllUsersWithRoles, createUserProfile, updateUserProfile, assignRoleToUser, removeRoleFromUser, getUserWithPermissions } from "@/lib/supabase/users"
 import { createClient } from '@/lib/supabase/client'
 import type { ExtendedUser } from "@/lib/types/supabase-types"

@@ -49,7 +49,7 @@ interface ReturnItem {
   packagingVariationId?: string
 }
 
-export default function ReturnsPage() {
+function ReturnsPageContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
   const saleId = searchParams.get('saleId')
@@ -596,4 +596,12 @@ export default function ReturnsPage() {
       </div>
     </div>
   )
-} 
+}
+
+export default function ReturnsPage() {
+  return (
+    <React.Suspense fallback={<div>Loading...</div>}>
+      <ReturnsPageContent />
+    </React.Suspense>
+  )
+}

@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -21,19 +21,17 @@ import {
   DialogContent,
   DialogDescription,
   DialogHeader,
-  DialogTitle,
-  DialogTrigger,
+  DialogTitle
 } from "@/components/ui/dialog"
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
+  SelectValue
 } from "@/components/ui/select"
 import { 
   Plus, 
-  Edit, 
   Trash2, 
   ArrowLeft
 } from "lucide-react"
@@ -42,6 +40,7 @@ import { getExpenseTypes, createExpenseType, updateExpenseType, deleteExpenseTyp
 import Link from 'next/link'
 
 export default function ManageExpenseTypesPage() {
+  const [loading, setLoading] = useState(true)
   const [expenseTypes, setExpenseTypes] = useState<ExpenseType[]>([])
 
   const [selectedExpenseType, setSelectedExpenseType] = useState<ExpenseType | null>(null)
@@ -50,7 +49,7 @@ export default function ManageExpenseTypesPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [expenseTypeToDelete, setExpenseTypeToDelete] = useState<ExpenseType | null>(null)
-  const [loading, setLoading] = useState(true)
+
   const [formData, setFormData] = useState({
     name: '',
     description: '',

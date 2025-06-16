@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
+
 import { AnimatedCard } from "@/components/animations/animated-card"
 import { AnimatedButton } from "@/components/animations/animated-button"
 import { StaggerContainer, StaggerItem } from "@/components/animations/stagger-container"
@@ -19,14 +19,12 @@ import {
 import { 
   Plus, 
   TrendingUp, 
-  TrendingDown, 
   ShoppingCart,
   CreditCard,
   Receipt,
   Building2,
   CalendarDays,
-  Package, 
-  Users
+  Package
 } from "lucide-react"
 
 // Import Supabase query functions
@@ -37,15 +35,10 @@ import { createClient } from "@/lib/supabase/client"
 
 // Global cache and request deduplication
 let globalCache: {
-  data?: {
-    sales?: any
-    expenses?: any 
-    purchases?: any
-    financial?: any
-  }
+  data?: DashboardStats
   lastFetch?: number
   isLoading?: boolean
-  loadingPromise?: Promise<any>
+  loadingPromise?: Promise<DashboardStats>
 } = {}
 
 const CACHE_DURATION = 30 * 1000 // 30 seconds
@@ -69,24 +62,24 @@ const getDashboardData = async () => {
   // Start fresh loading
   globalCache.isLoading = true
   globalCache.loadingPromise = Promise.all([
-    getSalesStats().catch((err: any) => {
+    getSalesStats().catch((err: Error | unknown) => {
       console.error('Sales stats error:', err)
       return null
     }),
-    getPurchaseStats().catch((err: any) => {
+    getPurchaseStats().catch((err: Error | unknown) => {
       console.error('Purchase stats error:', err) 
       return null
     }),
-    getExpenseStats().catch((err: any) => {
+    getExpenseStats().catch((err: Error | unknown) => {
       console.error('Expense stats error:', err)
       return null
     }),
-    getFinancialSummary().catch((err: any) => {
+    getFinancialSummary().catch((err: Error | unknown) => {
       console.error('Financial summary error:', err)
       return null
     })
   ]).then(([salesData, purchasesData, expensesData, financialData]) => {
-    const result = {
+    const result: DashboardStats = {
       sales: salesData,
       purchases: purchasesData, 
       expenses: expensesData,
@@ -101,7 +94,7 @@ const getDashboardData = async () => {
     
     console.log('✅ Dashboard data loaded and cached')
     return result
-  }).catch((error) => {
+  }).catch((error: Error | unknown) => {
     globalCache.isLoading = false
     globalCache.loadingPromise = undefined
     throw error
@@ -252,7 +245,7 @@ export default function DashboardPage() {
     if (!dataLoadedRef.current && !loadingRef.current) {
       loadDashboardData()
     }
-  }, [])
+  }, [loadDashboardData])
 
   // Calculate metrics based on time period
   const getMetricsForPeriod = () => {

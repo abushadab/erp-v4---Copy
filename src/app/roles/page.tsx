@@ -1,7 +1,7 @@
 'use client'
 
 import * as React from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -14,23 +14,21 @@ import {
   DialogDescription,
   DialogFooter,
   DialogHeader,
-  DialogTitle,
-  DialogTrigger,
+  DialogTitle
 } from "@/components/ui/dialog"
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
+  SelectValue
 } from "@/components/ui/select"
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuTrigger,
+  DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu"
 import {
   Table,
@@ -38,18 +36,15 @@ import {
   TableCell,
   TableHead,
   TableHeader,
-  TableRow,
+  TableRow
 } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
 import { 
   Plus, 
   Search, 
   Shield,
-  Edit,
   Trash2,
-  Users,
   Settings,
-  Eye,
   MoreHorizontal,
   Loader2,
   CheckCircle,
@@ -71,7 +66,7 @@ import {
   PERMISSION_MODULES,
   PERMISSION_ACTIONS,
   type Role,
-  type Permission,
+  type Permission
 } from "@/lib/types/supabase-types"
 import { useToast } from "@/hooks/use-toast"
 import { NotificationContainer } from "@/components/ui/notification"
@@ -195,7 +190,7 @@ export default function RolesPage() {
   const [roles, setRoles] = React.useState<Role[]>([])
   const [permissions, setPermissions] = React.useState<Permission[]>([])
   const [rolePermissions, setRolePermissions] = React.useState<{ [roleId: string]: Permission[] }>({})
-  const [loading, setLoading] = React.useState(true)
+
   const [searchTerm, setSearchTerm] = React.useState("")
   const [currentUserId, setCurrentUserId] = React.useState<string | null>(null);
   const [currentUserRole, setCurrentUserRole] = React.useState<string | null>(null);
@@ -220,6 +215,7 @@ export default function RolesPage() {
   const [isPermissionsDialogOpen, setIsPermissionsDialogOpen] = React.useState(false)
   
   // Loading states
+  const [loading, setLoading] = React.useState(true)
   const [isAddingRole, setIsAddingRole] = React.useState(false)
   const [isEditingRole, setIsEditingRole] = React.useState(false)
   const [isDeletingRole, setIsDeletingRole] = React.useState(false)

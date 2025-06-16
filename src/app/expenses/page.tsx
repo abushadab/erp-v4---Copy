@@ -1,18 +1,18 @@
 "use client"
 
 import React, { useState, useEffect } from 'react'
-import { motion } from 'framer-motion'
+import { motion } from "framer-motion"
 import { format } from "date-fns"
 import { Calendar as CalendarIcon } from "lucide-react"
+import { Calendar } from "@/components/ui/calendar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Calendar } from "@/components/ui/calendar"
 import {
   Popover,
   PopoverContent,
-  PopoverTrigger,
+  PopoverTrigger
 } from "@/components/ui/popover"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -29,26 +29,21 @@ import {
   DialogContent,
   DialogDescription,
   DialogHeader,
-  DialogTitle,
-  DialogTrigger,
+  DialogTitle
 } from "@/components/ui/dialog"
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
+  SelectValue
 } from "@/components/ui/select"
 import { 
   Search, 
-  Filter, 
   Plus, 
-  Eye, 
-  Edit, 
   Trash2, 
   Receipt,
   TrendingUp,
-  Calendar as CalendarIconTable,
   DollarSign,
   Save
 } from "lucide-react"
@@ -58,6 +53,7 @@ import { cn } from "@/lib/utils"
 import Link from 'next/link'
 
 export default function ExpensesPage() {
+  const [loading, setLoading] = useState(true)
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [expenseTypes, setExpenseTypes] = useState<ExpenseType[]>([])
   const [searchTerm, setSearchTerm] = useState('')
@@ -73,7 +69,7 @@ export default function ExpensesPage() {
     from: undefined,
     to: undefined
   })
-  const [loading, setLoading] = useState(true)
+
   const [formData, setFormData] = useState({
     expenseTypeId: '',
     amount: '',
@@ -372,7 +368,7 @@ export default function ExpensesPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Categories</CardTitle>
-            <CalendarIconTable className="h-4 w-4 text-muted-foreground" />
+                            <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
