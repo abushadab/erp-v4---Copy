@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { motion } from 'framer-motion'
 import { useRouter, useParams } from 'next/navigation'
 import { ArrowLeft, Package, Plus, X, Upload, Edit, Save } from "lucide-react"
 import Link from "next/link"
@@ -21,6 +20,7 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Table,
   TableBody,
@@ -126,101 +126,300 @@ interface EditAttributeForm {
   values: string[]
 }
 
-// Client-side query functions
-async function getProductById(id: string): Promise<DatabaseProduct | null> {
-  const supabase = createClient()
-  
-  const { data: product, error } = await supabase
-    .from('products')
-    .select(`
-      *,
-      category:categories(id, name, slug),
-      product_attributes(
-        attribute_id,
-        attributes!inner(id, name, type)
-      )
-    `)
-    .eq('id', id)
-    .single()
+// Simple module-level cache to avoid window object issues
+const dataCache = {
+  product: null as DatabaseProduct | null,
+  productId: '',
+  categories: [] as DatabaseCategory[],
+  attributes: [] as DatabaseAttribute[],
+  skuValidations: new Map<string, { result: boolean, timestamp: number }>(),
+  lastFetch: {
+    product: 0,
+    categories: 0,
+    attributes: 0
+  },
+  currentRequests: {
+    product: null as Promise<DatabaseProduct | null> | null,
+    categories: null as Promise<DatabaseCategory[]> | null,
+    attributes: null as Promise<DatabaseAttribute[]> | null,
+    skuValidations: new Map<string, Promise<boolean>>()
+  },
+  requestCounters: {
+    product: 0,
+    categories: 0,
+    attributes: 0
+  }
+}
 
-  if (error) {
-    console.error('Error fetching product:', error)
-    return null
+const CACHE_DURATION = 30000 // 30 seconds
+
+// Client-side query functions with deduplication
+async function getProductById(id: string, forceRefresh = false): Promise<DatabaseProduct | null> {
+  const now = Date.now()
+
+  // Check cache first
+  if (!forceRefresh && 
+      dataCache.product && 
+      dataCache.productId === id &&
+      (now - dataCache.lastFetch.product) < CACHE_DURATION) {
+    console.log('📦 Using cached product data for', id)
+    return dataCache.product
   }
 
-  // Get variations if it's a variation product
-  let variations: any[] = []
-  if (product.type === 'variation') {
-    const { data: variationData, error: variationsError } = await supabase
-      .from('product_variations')
-      .select(`
-        *,
-        product_variation_attributes(
-          attribute_id,
-          attribute_value_id,
-          attributes!inner(id, name, type),
-          attribute_values!inner(id, value, label)
-        )
-      `)
-      .eq('product_id', id)
+  // If there's already a request in progress, wait for it regardless of product ID
+  if (dataCache.currentRequests.product) {
+    console.log('⏳ Product request already in progress, waiting for existing promise...')
+    return await dataCache.currentRequests.product
+  }
 
-    if (!variationsError && variationData) {
-      variations = variationData.map(variation => ({
-        ...variation,
-        attribute_values: variation.product_variation_attributes.map((pva: any) => ({
-          attribute_id: pva.attribute_id,
-          attribute_name: pva.attributes.name,
-          value_id: pva.attribute_value_id,
-          value_label: pva.attribute_values.label
-        }))
-      }))
+  // Increment request counter for tracking
+  dataCache.requestCounters.product++
+  const requestNumber = dataCache.requestCounters.product
+  
+  // Generate unique request ID for tracking
+  const requestId = Math.random().toString(36).substr(2, 9)
+  
+  // Create a new request promise
+  const requestPromise = (async (): Promise<DatabaseProduct | null> => {
+    try {
+      console.log(`🔄 [${requestId}] (#${requestNumber}) Fetching fresh product data from API for`, id)
+      const supabase = createClient()
+      
+      const { data: product, error } = await supabase
+        .from('products')
+        .select(`
+          *,
+          category:categories(id, name, slug),
+          product_attributes(
+            attribute_id,
+            attributes!inner(id, name, type)
+          )
+        `)
+        .eq('id', id)
+        .single()
+
+      if (error) {
+        console.error('Error fetching product:', error)
+        return null
+      }
+
+      // Get variations if it's a variation product
+      let variations: any[] = []
+      if (product.type === 'variation') {
+        const { data: variationData, error: variationsError } = await supabase
+          .from('product_variations')
+          .select(`
+            *,
+            product_variation_attributes(
+              attribute_id,
+              attribute_value_id,
+              attributes!inner(id, name, type),
+              attribute_values!inner(id, value, label)
+            )
+          `)
+          .eq('product_id', id)
+
+        if (!variationsError && variationData) {
+          variations = variationData.map(variation => ({
+            ...variation,
+            attribute_values: variation.product_variation_attributes.map((pva: any) => ({
+              attribute_id: pva.attribute_id,
+              attribute_name: pva.attributes.name,
+              value_id: pva.attribute_value_id,
+              value_label: pva.attribute_values.label
+            }))
+          }))
+        }
+      }
+
+      const result = {
+        ...product,
+        variations: product.type === 'variation' ? variations : undefined,
+        attributes: product.product_attributes?.map((pa: any) => pa.attributes) || []
+      }
+
+      // Update cache
+      dataCache.product = result
+      dataCache.productId = id
+      dataCache.lastFetch.product = now
+
+      console.log(`✅ [${requestId}] (#${requestNumber}) Product data fetched successfully`)
+      return result
+    } catch (error) {
+      console.error(`❌ [${requestId}] (#${requestNumber}) Error loading product data:`, error)
+      throw error
+    } finally {
+      dataCache.currentRequests.product = null
+    }
+  })()
+
+  // Store the request promise
+  dataCache.currentRequests.product = requestPromise
+  
+  return await requestPromise
+}
+
+async function getCategories(forceRefresh = false): Promise<DatabaseCategory[]> {
+  const now = Date.now()
+
+  // Check cache first
+  if (!forceRefresh && 
+      dataCache.categories.length > 0 && 
+      (now - dataCache.lastFetch.categories) < CACHE_DURATION) {
+    console.log('📦 Using cached categories data')
+    return dataCache.categories
+  }
+
+  // If there's already a request in progress, wait for it
+  if (dataCache.currentRequests.categories) {
+    console.log('⏳ Categories request already in progress, waiting for existing promise...')
+    return await dataCache.currentRequests.categories
+  }
+
+  // Create a new request promise
+  const requestPromise = (async (): Promise<DatabaseCategory[]> => {
+    try {
+      console.log('🔄 Fetching fresh categories data from API')
+      const supabase = createClient()
+      
+      const { data, error } = await supabase
+        .from('categories')
+        .select('*')
+        .eq('status', 'active')
+        .order('name')
+
+      if (error) {
+        console.error('Error fetching categories:', error)
+        throw new Error('Failed to fetch categories')
+      }
+
+      const result = data || []
+
+      // Update cache
+      dataCache.categories = result
+      dataCache.lastFetch.categories = now
+
+      console.log('✅ Categories data fetched successfully')
+      return result
+    } catch (error) {
+      console.error('❌ Error loading categories data:', error)
+      throw error
+    } finally {
+      dataCache.currentRequests.categories = null
+    }
+  })()
+
+  // Store the request promise
+  dataCache.currentRequests.categories = requestPromise
+  
+  return await requestPromise
+}
+
+async function getAttributes(forceRefresh = false): Promise<DatabaseAttribute[]> {
+  const now = Date.now()
+
+  // Check cache first
+  if (!forceRefresh && 
+      dataCache.attributes.length > 0 && 
+      (now - dataCache.lastFetch.attributes) < CACHE_DURATION) {
+    console.log('📦 Using cached attributes data')
+    return dataCache.attributes
+  }
+
+  // If there's already a request in progress, wait for it
+  if (dataCache.currentRequests.attributes) {
+    console.log('⏳ Attributes request already in progress, waiting for existing promise...')
+    return await dataCache.currentRequests.attributes
+  }
+
+  // Create a new request promise
+  const requestPromise = (async (): Promise<DatabaseAttribute[]> => {
+    try {
+      console.log('🔄 Fetching fresh attributes data from API')
+      const supabase = createClient()
+
+      const { data, error } = await supabase
+        .from('attributes')
+        .select(`
+          *,
+          values:attribute_values(id, value, label, sort_order, created_at)
+        `)
+        .order('name')
+
+      if (error) {
+        console.error('Error fetching attributes:', error)
+        throw new Error('Failed to fetch attributes')
+      }
+
+      const result = data?.map(attr => ({
+        ...attr,
+        values: attr.values?.sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0))
+      })) || []
+
+      // Update cache
+      dataCache.attributes = result
+      dataCache.lastFetch.attributes = now
+
+      console.log('✅ Attributes data fetched successfully')
+      return result
+    } catch (error) {
+      console.error('❌ Error loading attributes data:', error)
+      throw error
+    } finally {
+      dataCache.currentRequests.attributes = null
+    }
+  })()
+
+  // Store the request promise
+  dataCache.currentRequests.attributes = requestPromise
+  
+  return await requestPromise
+}
+
+// Deduplicated SKU validation function
+async function validateSkuUnique(sku: string, excludeId: string, forceRefresh = false): Promise<boolean> {
+  const now = Date.now()
+  const cacheKey = `${sku}:${excludeId}`
+
+  // Check cache first
+  if (!forceRefresh) {
+    const cached = dataCache.skuValidations.get(cacheKey)
+    if (cached && (now - cached.timestamp) < CACHE_DURATION) {
+      console.log('📦 Using cached SKU validation for', sku)
+      return cached.result
     }
   }
 
-  return {
-    ...product,
-    variations: product.type === 'variation' ? variations : undefined,
-    attributes: product.product_attributes?.map((pa: any) => pa.attributes) || []
+  // If there's already a request in progress, wait for it
+  const existingRequest = dataCache.currentRequests.skuValidations.get(cacheKey)
+  if (existingRequest) {
+    console.log('⏳ SKU validation request already in progress, waiting for existing promise...')
+    return await existingRequest
   }
-}
 
-async function getCategories(): Promise<DatabaseCategory[]> {
-  const supabase = createClient()
+  // Create a new request promise
+  const requestPromise = (async (): Promise<boolean> => {
+    try {
+      console.log('🔄 Fetching fresh SKU validation from API for', sku)
+      const exists = await checkSkuExists(sku, excludeId)
+      
+      // Update cache
+      dataCache.skuValidations.set(cacheKey, { result: exists, timestamp: now })
+      
+      console.log('✅ SKU validation completed')
+      return exists
+    } catch (error) {
+      console.error('❌ Error validating SKU:', error)
+      throw error
+    } finally {
+      dataCache.currentRequests.skuValidations.delete(cacheKey)
+    }
+  })()
+
+  // Store the request promise
+  dataCache.currentRequests.skuValidations.set(cacheKey, requestPromise)
   
-  const { data, error } = await supabase
-    .from('categories')
-    .select('*')
-    .eq('status', 'active')
-    .order('name')
-
-  if (error) {
-    console.error('Error fetching categories:', error)
-    throw new Error('Failed to fetch categories')
-  }
-
-  return data || []
-}
-
-async function getAttributes(): Promise<DatabaseAttribute[]> {
-  const supabase = createClient()
-  
-  const { data, error } = await supabase
-    .from('attributes')
-    .select(`
-      *,
-      values:attribute_values(id, value, label, sort_order, created_at)
-    `)
-    .order('name')
-
-  if (error) {
-    console.error('Error fetching attributes:', error)
-    throw new Error('Failed to fetch attributes')
-  }
-
-  return data?.map(attr => ({
-    ...attr,
-    values: attr.values?.sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0))
-  })) || []
+  return await requestPromise
 }
 
 function transformDatabaseProductToProduct(dbProduct: DatabaseProduct): Product {
@@ -348,10 +547,34 @@ export default function EditProductPage() {
     message: ''
   })
 
-  // Load data on mount
+  // Enhanced deduplication with component-level tracking
+  const componentId = React.useRef(`edit-product-${productId}`)
+  const initialLoadCompleted = React.useRef(false)
+  const loadingPromise = React.useRef<Promise<void> | null>(null)
+
+  // Load data on mount with enhanced deduplication
   React.useEffect(() => {
+    // Don't load if no productId
+    if (!productId) {
+      return
+    }
+
+    // Prevent multiple calls in React Strict Mode development
+    if (initialLoadCompleted.current) {
+      console.log('⛔ Preventing duplicate data load - already completed')
+      return
+    }
+
+    // If there's already a loading promise, wait for it instead of creating a new one
+    if (loadingPromise.current) {
+      console.log('⛔ Preventing duplicate data load - loading in progress')
+      return
+    }
+    
     const loadData = async () => {
       try {
+        console.log('🚀 Starting data load for component:', componentId.current)
+        
         const [productData, categoriesData, attributesData] = await Promise.all([
           getProductById(productId),
           getCategories(),
@@ -396,17 +619,22 @@ export default function EditProductPage() {
         setForm(formData)
         
         setFormInitialized(true)
+        initialLoadCompleted.current = true
+        
+        console.log('✅ Data load completed for component:', componentId.current)
       } catch (error) {
         console.error('Error loading data:', error)
         toast.error('Failed to load product data')
         router.push('/products')
+      } finally {
+        loadingPromise.current = null
       }
     }
 
-    loadData()
-  }, [productId, router])
+    loadingPromise.current = loadData()
+  }, [productId])
 
-  // SKU validation with debouncing
+  // SKU validation with debouncing and deduplication
   const validateSku = React.useCallback(async (sku: string, isVariation = false, excludeId?: string) => {
     if (!sku.trim()) {
       if (isVariation) {
@@ -421,9 +649,6 @@ export default function EditProductPage() {
     setValidation({ isChecking: true, isValid: null, message: 'Checking SKU...' })
 
     try {
-      // Check if SKU exists in database (excluding current product/variation)
-      const exists = await checkSkuExists(sku, excludeId || productId)
-      
       // Also check against local variations if this is for a variation
       let duplicateInVariations = false
       if (isVariation) {
@@ -433,13 +658,23 @@ export default function EditProductPage() {
         )
       }
 
-      if (exists || duplicateInVariations) {
+      if (duplicateInVariations) {
         setValidation({ 
           isChecking: false, 
           isValid: false, 
-          message: duplicateInVariations 
-            ? 'SKU already exists in another variation' 
-            : 'SKU already exists' 
+          message: 'SKU already exists in another variation'
+        })
+        return
+      }
+
+      // Check if SKU exists in database (excluding current product/variation) with deduplication
+      const exists = await validateSkuUnique(sku, excludeId || productId)
+
+      if (exists) {
+        setValidation({ 
+          isChecking: false, 
+          isValid: false, 
+          message: 'SKU already exists' 
         })
       } else {
         setValidation({ isChecking: false, isValid: true, message: 'SKU is available' })
@@ -1006,12 +1241,102 @@ export default function EditProductPage() {
     return form.stock || 0
   }
 
+  // Handle missing productId
+  if (!productId) {
+    return (
+      <div className="flex-1 space-y-6 p-6">
+        <div className="text-center">
+          <p className="text-lg text-red-600">Invalid product ID</p>
+          <Link href="/products">
+            <Button className="mt-4">Back to Products</Button>
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
   if (!formInitialized) {
     return (
       <div className="flex-1 space-y-6 p-6">
-        <div className="flex items-center space-x-4">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
-          <p>Loading product data...</p>
+        {/* Header Skeleton */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-4">
+            <Skeleton className="h-10 w-32" />
+            <div>
+              <Skeleton className="h-9 w-48 mb-2" />
+              <Skeleton className="h-4 w-64" />
+            </div>
+          </div>
+          <Skeleton className="h-6 w-20" />
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Main Form Skeleton */}
+          <div className="lg:col-span-2 space-y-6">
+            <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
+              <div className="flex flex-col space-y-1.5 p-6">
+                <Skeleton className="h-6 w-40" />
+                <Skeleton className="h-4 w-56" />
+              </div>
+              <div className="p-6 pt-0 space-y-4">
+                <div className="space-y-2">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-10 w-full" />
+                </div>
+                <div className="space-y-2">
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-24 w-full" />
+                </div>
+                <div className="space-y-2">
+                  <Skeleton className="h-4 w-16" />
+                  <Skeleton className="h-10 w-full" />
+                </div>
+                <div className="space-y-3">
+                  <Skeleton className="h-4 w-24" />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <Skeleton className="h-20 w-full" />
+                    <Skeleton className="h-20 w-full" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
+              <div className="flex flex-col space-y-1.5 p-6">
+                <Skeleton className="h-6 w-32" />
+                <Skeleton className="h-4 w-48" />
+              </div>
+              <div className="p-6 pt-0 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Skeleton className="h-4 w-16" />
+                    <Skeleton className="h-10 w-full" />
+                  </div>
+                  <div className="space-y-2">
+                    <Skeleton className="h-4 w-20" />
+                    <Skeleton className="h-10 w-full" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Sidebar Skeleton */}
+          <div className="space-y-6">
+            <div className="rounded-lg border bg-card text-card-foreground shadow-sm">
+              <div className="flex flex-col space-y-1.5 p-6">
+                <Skeleton className="h-6 w-24" />
+                <Skeleton className="h-4 w-32" />
+              </div>
+              <div className="p-6 pt-0 space-y-4">
+                <div className="flex items-center space-x-2">
+                  <Skeleton className="h-5 w-5" />
+                  <Skeleton className="h-4 w-16" />
+                </div>
+                <Skeleton className="h-10 w-full" />
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     )
@@ -1055,18 +1380,14 @@ export default function EditProductPage() {
 
       {/* Success Message */}
       {showSuccess && (
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-6"
-        >
+        <div className="mb-6">
           <Alert className="border-green-200 bg-green-50">
             <Package className="h-4 w-4 text-green-600" />
             <AlertDescription className="text-green-800">
               Product has been updated successfully! Redirecting...
             </AlertDescription>
           </Alert>
-        </motion.div>
+        </div>
       )}
 
       {/* Error Messages */}
@@ -1934,11 +2255,7 @@ export default function EditProductPage() {
               disabled={isEditingAttribute}
             >
               {isEditingAttribute ? (
-                <motion.div
-                  className="mr-2 h-4 w-4 border-2 border-current border-t-transparent rounded-full"
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                />
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
               ) : (
                 <Save className="mr-2 h-4 w-4" />
               )}

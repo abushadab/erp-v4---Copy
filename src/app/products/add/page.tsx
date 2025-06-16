@@ -169,8 +169,8 @@ async function loadPageData(forceRefresh = false): Promise<{ categories: Categor
   const requestPromise = (async () => {
     try {
       console.log('🔄 Fetching fresh add product page data from API')
-      const supabase = createClient()
-
+  const supabase = createClient()
+  
       // Make both API calls in parallel to reduce overall loading time
       const [categoriesResult, attributesResult, attributeValuesResult] = await Promise.all([
         supabase
@@ -179,13 +179,13 @@ async function loadPageData(forceRefresh = false): Promise<{ categories: Categor
           .eq('status', 'active')
           .order('name'),
         supabase
-          .from('attributes')
-          .select('*')
+    .from('attributes')
+    .select('*')
           .order('name'),
         supabase
-          .from('attribute_values')
-          .select('*')
-          .order('sort_order')
+    .from('attribute_values')
+    .select('*')
+    .order('sort_order')
       ])
 
       if (categoriesResult.error) {
@@ -200,14 +200,14 @@ async function loadPageData(forceRefresh = false): Promise<{ categories: Categor
 
       if (attributeValuesResult.error) {
         console.error('Error fetching attribute values:', attributeValuesResult.error)
-        throw new Error('Failed to fetch attribute values')
-      }
+    throw new Error('Failed to fetch attribute values')
+  }
 
-      // Combine attributes with their values
+  // Combine attributes with their values
       const attributesWithValues = (attributesResult.data || []).map(attr => ({
-        ...attr,
+    ...attr,
         values: (attributeValuesResult.data || []).filter(val => val.attribute_id === attr.id)
-      }))
+  }))
 
       const result = {
         categories: categoriesResult.data || [],

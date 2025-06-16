@@ -105,11 +105,11 @@ export default function PackagingAttributesPage() {
 
     // Create a new request promise
     const requestPromise = (async () => {
-      try {
+    try {
         console.log('🔄 Fetching fresh attributes data from API')
-        setLoading(true)
+      setLoading(true)
         
-        const data = await getPackagingAttributes()
+      const data = await getPackagingAttributes()
         
         console.log('✅ Attributes data fetched successfully')
         
@@ -118,16 +118,16 @@ export default function PackagingAttributesPage() {
         dataCache.current.lastFetch = now
         
         // Update state
-        setAttributes(data)
-      } catch (error) {
+      setAttributes(data)
+    } catch (error) {
         console.error('❌ Error loading packaging attributes:', error)
-        toast.error('Failed to load packaging attributes')
+      toast.error('Failed to load packaging attributes')
         setAttributes([])
-      } finally {
+    } finally {
         console.log('🏁 Request completed, setting loading to false')
-        setLoading(false)
+      setLoading(false)
         dataCache.current.currentRequest = null
-      }
+    }
     })()
 
     // Store the request promise so other calls can wait for it
@@ -468,55 +468,55 @@ export default function PackagingAttributesPage() {
           <CardContent className="p-0">
             {attributes.length > 0 ? (
               <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Values</TableHead>
-                      <TableHead>Created</TableHead>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Values</TableHead>
+                    <TableHead>Created</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {attributes.map((attribute) => (
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {attributes.map((attribute) => (
                       <TableRow key={attribute.id} className="hover:bg-gray-50">
-                        <TableCell className="font-medium">{attribute.name}</TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-1 max-w-sm">
-                            {attribute.values?.map((value) => (
-                              <Badge key={value.id} variant="secondary" className="text-xs">
-                                {value.value}
-                              </Badge>
-                            ))}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {new Date(attribute.created_at).toLocaleDateString('en-BD')}
-                        </TableCell>
+                      <TableCell className="font-medium">{attribute.name}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1 max-w-sm">
+                          {attribute.values?.map((value) => (
+                            <Badge key={value.id} variant="secondary" className="text-xs">
+                              {value.value}
+                            </Badge>
+                          ))}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {new Date(attribute.created_at).toLocaleDateString('en-BD')}
+                      </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
+                          <Button
+                            variant="ghost"
+                            size="sm"
                               className="cursor-pointer"
-                              onClick={() => openEditDialog(attribute)}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
+                            onClick={() => openEditDialog(attribute)}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
                               className="text-red-600 hover:text-red-800 cursor-pointer"
-                              onClick={() => openDeleteModal(attribute)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                            onClick={() => openDeleteModal(attribute)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
               </div>
             ) : (
               <div className="text-center py-12">

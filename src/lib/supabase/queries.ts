@@ -481,26 +481,26 @@ export async function getPackagingAttributes(): Promise<DatabasePackagingAttribu
   // Create new request
   packagingAttributesCache.promise = (async () => {
     try {
-      const supabase = createClient()
-      
-      const { data, error } = await supabase
-        .from('packaging_attributes')
-        .select(`
-          *,
-          values:packaging_attribute_values(id, value, label, slug, sort_order, created_at)
-        `)
-        .eq('status', 'active')
-        .order('name')
+  const supabase = createClient()
+  
+  const { data, error } = await supabase
+    .from('packaging_attributes')
+    .select(`
+      *,
+      values:packaging_attribute_values(id, value, label, slug, sort_order, created_at)
+    `)
+    .eq('status', 'active')
+    .order('name')
 
-      if (error) {
-        console.error('Error fetching packaging attributes:', error)
-        throw new Error('Failed to fetch packaging attributes')
-      }
+  if (error) {
+    console.error('Error fetching packaging attributes:', error)
+    throw new Error('Failed to fetch packaging attributes')
+  }
 
       const transformedData = data?.map(attr => ({
-        ...attr,
-        values: attr.values?.sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0))
-      })) || []
+    ...attr,
+    values: attr.values?.sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0))
+  })) || []
 
       // Cache the result
       packagingAttributesCache.data = transformedData
@@ -657,44 +657,44 @@ export async function getPackaging(): Promise<DatabasePackaging[]> {
   // Create new request
   packagingCache.promise = (async () => {
     try {
-      const supabase = createClient()
-      
-      const { data, error } = await supabase
-        .from('packaging')
-        .select(`
-          *,
-          variations:packaging_variations(
-            id,
-            sku,
-            created_at,
-            updated_at,
-            variation_attributes:packaging_variation_attributes(
-              attribute_id,
-              attribute_value_id,
-              attribute:packaging_attributes(name),
-              value:packaging_attribute_values(value, label)
-            )
-          )
-        `)
-        .order('title')
+  const supabase = createClient()
+  
+  const { data, error } = await supabase
+    .from('packaging')
+    .select(`
+      *,
+      variations:packaging_variations(
+        id,
+        sku,
+        created_at,
+        updated_at,
+        variation_attributes:packaging_variation_attributes(
+          attribute_id,
+          attribute_value_id,
+          attribute:packaging_attributes(name),
+          value:packaging_attribute_values(value, label)
+        )
+      )
+    `)
+    .order('title')
 
-      if (error) {
-        console.error('Error fetching packaging:', error)
-        throw new Error('Failed to fetch packaging')
-      }
+  if (error) {
+    console.error('Error fetching packaging:', error)
+    throw new Error('Failed to fetch packaging')
+  }
 
-      // Transform the data to include attribute values in the expected format
-      const transformedData = data?.map(packaging => ({
-        ...packaging,
-        variations: packaging.variations?.map((variation: any) => ({
-          ...variation,
-          attribute_values: variation.variation_attributes?.map((attr: any) => ({
-            attribute_id: attr.attribute_id,
-            attribute_name: attr.attribute?.name || '',
-            value_id: attr.attribute_value_id,
-            value_label: attr.value?.label || attr.value?.value || ''
-          })) || []
-        })) || []
+  // Transform the data to include attribute values in the expected format
+  const transformedData = data?.map(packaging => ({
+    ...packaging,
+    variations: packaging.variations?.map((variation: any) => ({
+      ...variation,
+      attribute_values: variation.variation_attributes?.map((attr: any) => ({
+        attribute_id: attr.attribute_id,
+        attribute_name: attr.attribute?.name || '',
+        value_id: attr.attribute_value_id,
+        value_label: attr.value?.label || attr.value?.value || ''
+      })) || []
+    })) || []
       })) || []
 
       // Cache the result

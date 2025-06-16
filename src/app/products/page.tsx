@@ -81,110 +81,110 @@ async function getAllProducts(forceRefresh = false): Promise<Product[]> {
     try {
       console.log('🔄 Fetching fresh products data from API')
       
-      const supabase = createClient()
-      
-      const { data: products, error } = await supabase
-        .from('products')
+  const supabase = createClient()
+  
+  const { data: products, error } = await supabase
+    .from('products')
+    .select(`
+      *,
+      category:categories(id, name, slug),
+      product_attributes(
+        attribute_id,
+        attributes!inner(id, name, type)
+      )
+    `)
+    .order('created_at', { ascending: false })
+
+  if (error) {
+    console.error('Error fetching products:', error)
+    throw new Error('Failed to fetch products')
+  }
+
+  // Get variations for each variation product and stock data
+  const transformedProducts: Product[] = []
+  
+  for (const product of products || []) {
+    let variations: any[] = []
+    
+    if (product.type === 'variation') {
+      const { data: variationData, error: variationsError } = await supabase
+        .from('product_variations')
         .select(`
           *,
-          category:categories(id, name, slug),
-          product_attributes(
+          product_variation_attributes(
             attribute_id,
-            attributes!inner(id, name, type)
+            attribute_value_id,
+            attributes!inner(id, name, type),
+            attribute_values!inner(id, value, label)
           )
         `)
-        .order('created_at', { ascending: false })
+        .eq('product_id', product.id)
 
-      if (error) {
-        console.error('Error fetching products:', error)
-        throw new Error('Failed to fetch products')
+      if (!variationsError && variationData) {
+        // Get stock for each variation
+        const variationsWithStock = await Promise.all(
+          variationData.map(async (variation) => {
+            try {
+              const stock = await getTotalProductStock(product.id, variation.id)
+              return {
+                ...variation,
+                stock: stock, // Add actual warehouse stock
+                attribute_values: variation.product_variation_attributes.map((pva: any) => ({
+                  attribute_id: pva.attribute_id,
+                  attribute_name: pva.attributes.name,
+                  value_id: pva.attribute_value_id,
+                  value_label: pva.attribute_values.label
+                }))
+              }
+            } catch (error) {
+              console.error(`Error fetching stock for variation ${variation.id}:`, error)
+              return {
+                ...variation,
+                stock: 0,
+                attribute_values: variation.product_variation_attributes.map((pva: any) => ({
+                  attribute_id: pva.attribute_id,
+                  attribute_name: pva.attributes.name,
+                  value_id: pva.attribute_value_id,
+                  value_label: pva.attribute_values.label
+                }))
+              }
+            }
+          })
+        )
+        variations = variationsWithStock
       }
+    }
 
-      // Get variations for each variation product and stock data
-      const transformedProducts: Product[] = []
-      
-      for (const product of products || []) {
-        let variations: any[] = []
-        
-        if (product.type === 'variation') {
-          const { data: variationData, error: variationsError } = await supabase
-            .from('product_variations')
-            .select(`
-              *,
-              product_variation_attributes(
-                attribute_id,
-                attribute_value_id,
-                attributes!inner(id, name, type),
-                attribute_values!inner(id, value, label)
-              )
-            `)
-            .eq('product_id', product.id)
+    // Get stock for simple products
+    let productStock = 0
+    if (product.type === 'simple') {
+      try {
+        productStock = await getTotalProductStock(product.id)
+      } catch (error) {
+        console.error(`Error fetching stock for product ${product.id}:`, error)
+        productStock = 0
+      }
+    }
 
-          if (!variationsError && variationData) {
-            // Get stock for each variation
-            const variationsWithStock = await Promise.all(
-              variationData.map(async (variation) => {
-                try {
-                  const stock = await getTotalProductStock(product.id, variation.id)
-                  return {
-                    ...variation,
-                    stock: stock, // Add actual warehouse stock
-                    attribute_values: variation.product_variation_attributes.map((pva: any) => ({
-                      attribute_id: pva.attribute_id,
-                      attribute_name: pva.attributes.name,
-                      value_id: pva.attribute_value_id,
-                      value_label: pva.attribute_values.label
-                    }))
-                  }
-                } catch (error) {
-                  console.error(`Error fetching stock for variation ${variation.id}:`, error)
-                  return {
-                    ...variation,
-                    stock: 0,
-                    attribute_values: variation.product_variation_attributes.map((pva: any) => ({
-                      attribute_id: pva.attribute_id,
-                      attribute_name: pva.attributes.name,
-                      value_id: pva.attribute_value_id,
-                      value_label: pva.attribute_values.label
-                    }))
-                  }
-                }
-              })
-            )
-            variations = variationsWithStock
-          }
-        }
-
-        // Get stock for simple products
-        let productStock = 0
-        if (product.type === 'simple') {
-          try {
-            productStock = await getTotalProductStock(product.id)
-          } catch (error) {
-            console.error(`Error fetching stock for product ${product.id}:`, error)
-            productStock = 0
-          }
-        }
-
-        const dbProduct = {
-          ...product,
-          stock: productStock, // Add actual warehouse stock for simple products
-          variations: product.type === 'variation' ? variations : undefined,
-          attributes: product.product_attributes?.map((pa: any) => pa.attributes) || []
-        }
+    const dbProduct = {
+      ...product,
+      stock: productStock, // Add actual warehouse stock for simple products
+      variations: product.type === 'variation' ? variations : undefined,
+      attributes: product.product_attributes?.map((pa: any) => pa.attributes) || []
+    }
 
         const transformedProduct = transformDatabaseProductToProduct(dbProduct)
         // Add the database created_at field for display
         ;(transformedProduct as any).created_at = product.created_at
         transformedProducts.push(transformedProduct)
-      }
+  }
 
       // Update cache
       dataCache.products = transformedProducts
       dataCache.lastFetch = now
       
       console.log('✅ Products data fetched successfully')
-      return transformedProducts
+  return transformedProducts
     } catch (error) {
       console.error('❌ Error loading products data:', error)
       throw error
@@ -316,14 +316,14 @@ export default function ProductsPage() {
   const getStockDisplay = (product: Product) => {
     const totalStock = calculateTotalStock(product)
     
-    return (
+      return (
       <div className="space-y-1">
         <div className="font-medium">{totalStock}</div>
         {getStockBadge(product)}
       </div>
-    )
-  }
-
+      )
+    }
+    
   if (isLoading) {
     return (
       <div className="flex-1 space-y-6 p-6">
@@ -431,12 +431,12 @@ export default function ProductsPage() {
               Product Categories
             </Button>
           </Link>
-          <Link href="/products/add">
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Product
-            </Button>
-          </Link>
+        <Link href="/products/add">
+          <Button>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Product
+          </Button>
+        </Link>
         </div>
       </div>
 
@@ -636,37 +636,37 @@ export default function ProductsPage() {
         </CardContent>
       </Card>
 
-      {/* Pagination */}
+              {/* Pagination */}
       {paginatedProducts.length > 0 && (
-        <div className="flex items-center justify-between mt-4">
-          <div className="text-sm text-muted-foreground">
-            Showing {startIndex + 1} to {Math.min(endIndex, totalItems)} of {totalItems} products
-          </div>
-          <div className="flex items-center space-x-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCurrentPage(currentPage - 1)}
-              disabled={currentPage === 1}
-            >
-              <ChevronLeft className="h-4 w-4" />
-              Previous
-            </Button>
-            <div className="text-sm">
-              Page {currentPage} of {totalPages}
+              <div className="flex items-center justify-between mt-4">
+                <div className="text-sm text-muted-foreground">
+                  Showing {startIndex + 1} to {Math.min(endIndex, totalItems)} of {totalItems} products
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(currentPage - 1)}
+                    disabled={currentPage === 1}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Previous
+                  </Button>
+                  <div className="text-sm">
+                    Page {currentPage} of {totalPages}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                  >
+                    Next
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCurrentPage(currentPage + 1)}
-              disabled={currentPage === totalPages}
-            >
-              Next
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      )}
+          )}
 
       {/* View Product Modal */}
       <ViewProductModal

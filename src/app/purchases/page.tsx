@@ -359,7 +359,7 @@ export default function PurchasesPage() {
           <div>
             <Skeleton className="h-8 w-48 mb-2" />
             <Skeleton className="h-4 w-72" />
-          </div>
+        </div>
           <div className="mt-4 sm:mt-0">
             <Skeleton className="h-10 w-40" />
           </div>

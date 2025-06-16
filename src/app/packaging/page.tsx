@@ -138,30 +138,30 @@ export default function PackagingPage() {
         
         // Calculate total stock for each packaging item using the batch-loaded data
         const packagingWithStock = data.map((packaging) => {
-          try {
-            let totalStock = 0
+            try {
+              let totalStock = 0
             
-            if (packaging.type === 'simple') {
+              if (packaging.type === 'simple') {
               totalStock = batchStockMap.get(packaging.id) || 0
-            } else if (packaging.type === 'variable' && packaging.variations) {
+              } else if (packaging.type === 'variable' && packaging.variations) {
               totalStock = packaging.variations.reduce((sum, variation) => {
                 const variationStock = batchStockMap.get(`${packaging.id}-${variation.id}`) || 0
                 return sum + variationStock
               }, 0)
-            }
-            
-            return {
-              ...packaging,
-              totalStock
-            }
-          } catch (error) {
+              }
+              
+              return {
+                ...packaging,
+                totalStock
+              }
+            } catch (error) {
             console.error(`Error calculating stock for packaging ${packaging.id}:`, error)
-            return {
-              ...packaging,
-              totalStock: 0
+              return {
+                ...packaging,
+                totalStock: 0
+              }
             }
-          }
-        })
+          })
         
         // Create stock data map for easy access
         const finalStockMap = packagingWithStock.reduce((acc, packaging) => {
@@ -582,37 +582,37 @@ export default function PackagingPage() {
         </CardContent>
       </Card>
 
-      {/* Pagination */}
+              {/* Pagination */}
       {paginatedPackaging.length > 0 && (
-        <div className="flex items-center justify-between mt-4">
-          <div className="text-sm text-muted-foreground">
-            Showing {startIndex + 1} to {Math.min(endIndex, totalItems)} of {totalItems} packaging items
-          </div>
-          <div className="flex items-center space-x-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCurrentPage(currentPage - 1)}
-              disabled={currentPage === 1}
-            >
-              <ChevronLeft className="h-4 w-4" />
-              Previous
-            </Button>
-            <div className="text-sm">
-              Page {currentPage} of {totalPages}
+              <div className="flex items-center justify-between mt-4">
+                <div className="text-sm text-muted-foreground">
+                  Showing {startIndex + 1} to {Math.min(endIndex, totalItems)} of {totalItems} packaging items
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(currentPage - 1)}
+                    disabled={currentPage === 1}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Previous
+                  </Button>
+                  <div className="text-sm">
+                    Page {currentPage} of {totalPages}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                  >
+                    Next
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCurrentPage(currentPage + 1)}
-              disabled={currentPage === totalPages}
-            >
-              Next
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      )}
+          )}
 
       {/* View Packaging Modal */}
       <ViewPackagingModal

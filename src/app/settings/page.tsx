@@ -52,6 +52,7 @@ import {
   Loader2
 } from "lucide-react"
 import { fixAllPurchaseStatuses } from '@/lib/supabase/purchases'
+import { UserProfileSettings } from '@/components/settings/user-profile-settings'
 
 export default function SettingsPage() {
   const [notifications, setNotifications] = React.useState({
@@ -387,35 +388,7 @@ export default function SettingsPage() {
 
         <TabsContent value="account" className="space-y-6">
           <div className="grid gap-6 md:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <User className="mr-2 h-5 w-5" />
-                  Profile Information
-                </CardTitle>
-                <CardDescription>
-                  Update your personal account information
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="fullName">Full Name</Label>
-                  <Input id="fullName" defaultValue="John Doe" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email Address</Label>
-                  <Input id="email" type="email" defaultValue="john.doe@company.com" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Phone Number</Label>
-                  <Input id="phone" defaultValue="+1 (555) 123-4567" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="department">Department</Label>
-                  <Input id="department" defaultValue="Management" />
-                </div>
-              </CardContent>
-            </Card>
+            <UserProfileSettings />
 
             <Card>
               <CardHeader>
