@@ -75,12 +75,10 @@ export const staggerItem: Variants = {
 // Card hover animations
 export const cardHoverVariants: Variants = {
   initial: {
-    scale: 1,
-    boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)'
+    scale: 1
   },
   hover: {
     scale: 1.02,
-    boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)',
     transition: {
       type: 'tween',
       duration: 0.2,

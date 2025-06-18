@@ -296,33 +296,54 @@ export default function ProductsPage() {
     return 0
   }
 
-  const getLowStockStatus = (product: Product) => {
-    const totalStock = calculateTotalStock(product)
-    const threshold = 10 // Default low stock threshold
-    return totalStock <= threshold
-  }
+
 
   const getStockBadge = (product: Product) => {
     const totalStock = calculateTotalStock(product)
-    const isLowStock = getLowStockStatus(product)
     
-    return (
-      <Badge variant={isLowStock ? "destructive" : "outline"} className="text-xs">
-        {isLowStock ? "Low Stock" : "In Stock"}
-      </Badge>
-    )
+    if (totalStock === 0) {
+      return (
+        <Badge 
+          variant="outline" 
+          className="text-xs border-transparent bg-red-100 text-red-800 hover:bg-red-200"
+        >
+          Out of Stock
+        </Badge>
+      )
+    }
+    
+    if (totalStock <= 10) {
+      return (
+        <Badge variant="destructive" className="text-xs">
+          Low Stock
+        </Badge>
+      )
+    }
+    
+    // Don't show any badge when there's sufficient stock
+    return null
   }
 
   const getStockDisplay = (product: Product) => {
     const totalStock = calculateTotalStock(product)
+    const stockBadge = getStockBadge(product)
     
+    // For out of stock products, only show the badge
+    if (totalStock === 0) {
       return (
-      <div className="space-y-1">
-        <div className="font-medium">{totalStock}</div>
-        {getStockBadge(product)}
-      </div>
+        <div>
+          {stockBadge}
+        </div>
       )
     }
+    
+    return (
+      <div className="space-y-1">
+        <div className="font-medium">{totalStock}</div>
+        {stockBadge}
+      </div>
+    )
+  }
     
   if (isLoading) {
     return (

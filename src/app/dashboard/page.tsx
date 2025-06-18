@@ -134,10 +134,10 @@ const getSalesStats = async () => {
 // Create a simple stats function for expenses
 const getExpenseStats = async () => {
   const expenses = await getExpenses()
-  const totalExpenses = expenses.reduce((sum, expense) => sum + (expense.amount || 0), 0)
+  const totalExpenses = expenses.reduce((sum: number, expense: any) => sum + (expense.amount || 0), 0)
   
   // Group by type
-  const expensesByType = expenses.reduce((acc, expense) => {
+  const expensesByType = expenses.reduce((acc: Record<string, number>, expense: any) => {
     const typeName = expense.expense_type_name || 'Unknown'
     if (!acc[typeName]) {
       acc[typeName] = 0
@@ -284,7 +284,7 @@ export default function DashboardPage() {
         {/* Stats Cards Skeleton */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="p-6 border rounded-lg">
+            <div key={i} className="p-6 rounded-lg" style={{ boxShadow: '0 2px 8px #00000005', backgroundColor: '#ffffff' }}>
               <div className="flex items-center justify-between mb-2">
                 <Skeleton className="h-4 w-24" />
                 <Skeleton className="h-4 w-4" />
@@ -297,11 +297,11 @@ export default function DashboardPage() {
 
         {/* Charts Skeleton */}
         <div className="grid gap-6 md:grid-cols-2">
-          <div className="p-6 border rounded-lg">
+          <div className="p-6 rounded-lg" style={{ boxShadow: '0 2px 8px #00000005', backgroundColor: '#ffffff' }}>
             <Skeleton className="h-6 w-32 mb-4" />
             <Skeleton className="h-64 w-full" />
           </div>
-          <div className="p-6 border rounded-lg">
+          <div className="p-6 rounded-lg" style={{ boxShadow: '0 2px 8px #00000005', backgroundColor: '#ffffff' }}>
             <Skeleton className="h-6 w-32 mb-4" />
             <Skeleton className="h-64 w-full" />
           </div>

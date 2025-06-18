@@ -32,7 +32,8 @@ export function UserProfile() {
         console.error('Sign out error:', error)
       } else {
         toast.success('Successfully signed out')
-        // The auth state change will handle the redirect
+        // Redirect to login page
+        window.location.href = '/login'
       }
     } catch (err) {
       toast.error('An error occurred while signing out')
@@ -59,13 +60,11 @@ export function UserProfile() {
   // Loading state
   if (loading) {
     return (
-      <div className="border-t p-4">
-        <div className="flex items-center space-x-3">
-          <Skeleton className="h-8 w-8 rounded-full" />
-          <div className="space-y-1">
-            <Skeleton className="h-4 w-24" />
-            <Skeleton className="h-3 w-16" />
-          </div>
+      <div className="flex items-center space-x-3">
+        <Skeleton className="h-8 w-8 rounded-full" />
+        <div className="space-y-1">
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-3 w-16" />
         </div>
       </div>
     )
@@ -74,15 +73,13 @@ export function UserProfile() {
   // Error state
   if (error || !user) {
     return (
-      <div className="border-t p-4">
-        <div className="flex items-center space-x-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
-            <User className="h-4 w-4" />
-          </div>
-          <div className="text-left">
-            <div className="text-sm font-medium text-muted-foreground">
-              {error ? 'Error loading profile' : 'Not signed in'}
-            </div>
+      <div className="flex items-center space-x-3">
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
+          <User className="h-4 w-4" />
+        </div>
+        <div className="text-left">
+          <div className="text-sm font-medium text-muted-foreground">
+            {error ? 'Error loading profile' : 'Not signed in'}
           </div>
         </div>
       </div>
@@ -90,10 +87,10 @@ export function UserProfile() {
   }
 
   return (
-    <div className="border-t p-4">
+    <div>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" className="w-full justify-start hover:bg-muted transition-colors">
+          <Button variant="ghost" className="justify-start transition-colors px-2 py-2 h-11" onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#d4dfe1'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground mr-3">
               {user.avatar_url ? (
                 <img 

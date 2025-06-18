@@ -29,7 +29,9 @@ import {
   RefreshCw,
   ArrowUpDown,
   Plus,
-  Loader2
+  Loader2,
+  Eye,
+  EyeOff
 } from "lucide-react"
 import { 
   getJournalEntriesWithLines,

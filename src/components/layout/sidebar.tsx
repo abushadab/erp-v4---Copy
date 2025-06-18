@@ -169,10 +169,22 @@ export function Sidebar({ children }: SidebarProps) {
   const [mounted, setMounted] = React.useState(false)
   const [isDesktop, setIsDesktop] = React.useState(false)
   const [expandedMenus, setExpandedMenus] = React.useState<string[]>([]) // Empty by default
+  const [isSticky, setIsSticky] = React.useState(false)
   const supabase = createClient()
 
+  // First useEffect to set mounted state
   React.useEffect(() => {
-    setMounted(true)
+    console.log('🚀 Sidebar mounting, setting mounted to true')
+    // Add a small delay to make skeleton more visible for testing
+    const timer = setTimeout(() => {
+      setMounted(true)
+    }, 500)
+    
+    return () => clearTimeout(timer)
+  }, [])
+
+  // Second useEffect for scroll detection
+  React.useEffect(() => {
     
     // Check if it's desktop size
     const checkDesktop = () => {
@@ -182,8 +194,52 @@ export function Sidebar({ children }: SidebarProps) {
     checkDesktop()
     window.addEventListener('resize', checkDesktop)
     
-    return () => window.removeEventListener('resize', checkDesktop)
-  }, [])
+    // Use a ref to track main content and add scroll listener
+    let mainContentElement: HTMLElement | null = null
+    
+    const handleMainScroll = () => {
+      if (mainContentElement) {
+        const scrolled = mainContentElement.scrollTop > 0
+        setIsSticky(scrolled)
+      }
+    }
+    
+    // Find and attach to main content scroll - use a more targeted approach
+    const findAndAttachScroll = () => {
+      // Try to find the main content element
+      const main = document.querySelector('main') as HTMLElement
+      
+      if (main && main.classList.contains('overflow-auto')) {
+        mainContentElement = main
+        main.addEventListener('scroll', handleMainScroll, { passive: true })
+        return true
+      }
+      return false
+    }
+    
+    // Try immediately
+    if (!findAndAttachScroll()) {
+      // If not found, retry after DOM is ready
+      const timeoutId = setTimeout(() => {
+        findAndAttachScroll()
+      }, 100)
+      
+      return () => {
+        window.removeEventListener('resize', checkDesktop)
+        if (mainContentElement) {
+          mainContentElement.removeEventListener('scroll', handleMainScroll)
+        }
+        clearTimeout(timeoutId)
+      }
+    }
+    
+    return () => {
+      window.removeEventListener('resize', checkDesktop)
+      if (mainContentElement) {
+        mainContentElement.removeEventListener('scroll', handleMainScroll)
+      }
+    }
+  }, [mounted])
 
   // Auto-expand Sales menu if user is on any sales-related page
   React.useEffect(() => {
@@ -212,60 +268,65 @@ export function Sidebar({ children }: SidebarProps) {
   const toggleMenu = (menuName: string) => {
     setExpandedMenus(prev => 
       prev.includes(menuName) 
-        ? prev.filter(name => name !== menuName)
-        : [...prev, menuName]
+        ? prev.filter(name => name !== menuName)  // Close this menu
+        : [menuName]  // Close all others and open only this one
     )
   }
 
   const isMenuExpanded = (menuName: string) => expandedMenus.includes(menuName)
 
   // Prevent hydration mismatch
+  console.log('🔍 Sidebar render - mounted:', mounted, 'pathname:', pathname)
   if (!mounted) {
     return (
       <div className="flex h-screen bg-background">
         {/* Sidebar Skeleton */}
-        <div className="w-64 bg-background border-r">
+        <div className="w-64 bg-background border-r" suppressHydrationWarning>
           <div className="flex flex-col h-full">
             {/* Logo Skeleton */}
-            <div className="flex items-center justify-between px-6 py-4 border-b">
-              <Skeleton className="h-6 w-24" />
+            <div className="flex items-center justify-between px-6 py-4" style={{ minHeight: '72px' }} suppressHydrationWarning>
+              <div className="h-6 w-24 rounded-md animate-pulse" style={{ backgroundColor: '#e2e8f0' }}></div>
             </div>
 
             {/* Navigation Skeleton */}
             <nav className="flex-1 px-4 py-4 space-y-2">
               {Array.from({ length: 9 }).map((_, i) => (
-                <Skeleton key={i} className="h-9 w-full" />
+                <div key={i} className="h-9 w-full rounded-md animate-pulse" style={{ backgroundColor: '#e2e8f0' }}></div>
               ))}
             </nav>
 
-            {/* User Section Skeleton */}
-            <div className="border-t p-4">
-              <div className="flex items-center space-x-3">
-                <Skeleton className="h-8 w-8 rounded-full" />
-                <div className="space-y-1">
-                  <Skeleton className="h-4 w-20" />
-                  <Skeleton className="h-3 w-16" />
-                </div>
-              </div>
-            </div>
+
           </div>
         </div>
 
         {/* Main Content Skeleton */}
         <div className="flex-1 flex flex-col">
           {/* Top Bar Skeleton */}
-          <header className="bg-background border-b px-6 py-4 lg:px-8 h-16">
+          <header className="px-6 py-4 lg:px-8" style={{ backgroundColor: '#f4f8f9', minHeight: '76px' }} suppressHydrationWarning>
             <div className="flex items-center justify-between">
-              <Skeleton className="h-5 w-5 lg:hidden" />
-              <div className="flex items-center space-x-4 ml-auto">
-                <Skeleton className="h-9 w-64 lg:w-96" />
-                <Skeleton className="h-9 w-9" />
+              <div className="flex items-center space-x-4">
+                <div className="h-5 w-5 rounded-md animate-pulse lg:hidden" style={{ backgroundColor: '#e2e8f0' }}></div>
+                <div className="h-9 w-64 lg:w-96 rounded-md animate-pulse" style={{ backgroundColor: '#e2e8f0' }}></div>
+              </div>
+              
+              <div className="flex items-center space-x-4">
+                {/* Notifications Skeleton */}
+                <div className="h-9 w-9 rounded-md animate-pulse" style={{ backgroundColor: '#e2e8f0' }}></div>
+                
+                {/* User Profile Skeleton */}
+                <div className="flex items-center h-11 px-2 py-2 rounded-md animate-pulse" style={{ backgroundColor: '#e2e8f0', minWidth: '180px' }} suppressHydrationWarning>
+                  <div className="h-8 w-8 rounded-full mr-3" style={{ backgroundColor: '#d1d5db' }}></div>
+                  <div className="flex flex-col space-y-1">
+                    <div className="h-3.5 w-20 rounded" style={{ backgroundColor: '#d1d5db' }}></div>
+                    <div className="h-3 w-12 rounded" style={{ backgroundColor: '#d1d5db' }}></div>
+                  </div>
+                </div>
               </div>
             </div>
           </header>
 
           {/* Page Content */}
-          <main className="flex-1 overflow-auto">
+          <main className="flex-1 overflow-auto" style={{ backgroundColor: '#f4f8f9' }} suppressHydrationWarning>
             {children}
           </main>
         </div>
@@ -291,14 +352,15 @@ export function Sidebar({ children }: SidebarProps) {
 
       {/* Sidebar */}
       <motion.div 
-        className="fixed inset-y-0 left-0 z-50 w-64 bg-background border-r lg:translate-x-0 lg:static lg:inset-0"
+        className="fixed inset-y-0 left-0 z-50 w-64 bg-background lg:translate-x-0 lg:static lg:inset-0"
+        style={{ boxShadow: '2px 0 8px #00000005' }}
         variants={sidebarVariants}
         animate={isDesktop ? "desktop" : sidebarOpen ? "open" : "closed"}
         initial={isDesktop ? "desktop" : "closed"}
       >
         <div className="flex flex-col h-full">
           {/* Logo */}
-          <div className="flex items-center justify-between px-6 py-4 border-b">
+          <div className="flex items-center justify-between px-6 py-4">
             <Link href="/dashboard" className="text-xl font-bold" style={{ paddingBlock: '6px' }}>
               ERP System
             </Link>
@@ -426,49 +488,57 @@ export function Sidebar({ children }: SidebarProps) {
               )
             })}
           </nav>
-
-          {/* User section */}
-          <UserProfile />
         </div>
       </motion.div>
 
       {/* Main content */}
       <div className="flex-1 flex flex-col lg:ml-0">
         {/* Top bar */}
-        <header className="bg-background border-b px-6 py-4 lg:px-8">
+        <header 
+          className="sticky top-0 z-40 px-6 py-4 lg:px-8 transition-all duration-200"
+          style={{ 
+            backgroundColor: isSticky ? '#fff' : '#f4f8f9',
+            boxShadow: isSticky ? '0 2px 8px #00000005' : 'none'
+          }}
+        >
           <div className="flex items-center justify-between">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="lg:hidden"
-              onClick={() => setSidebarOpen(true)}
-            >
-              <Menu className="h-5 w-5" />
-            </Button>
+            <div className="flex items-center space-x-4">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="lg:hidden"
+                onClick={() => setSidebarOpen(true)}
+              >
+                <Menu className="h-5 w-5" />
+              </Button>
 
-            <div className="flex items-center space-x-4 ml-auto">
-              {/* Search */}
+              {/* Search - moved to left */}
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   placeholder="Search..."
-                  className="pl-10 w-64 lg:w-96 focus:ring-2 focus:ring-primary/20 transition-all"
+                  className="pl-10 w-64 lg:w-96 focus:ring-0 focus:ring-offset-0 focus:shadow-none transition-all"
                 />
               </div>
+            </div>
 
+            <div className="flex items-center space-x-4">
               {/* Notifications */}
               <div>
-                <Button variant="ghost" size="sm" className="relative hover:bg-muted transition-colors">
+                <Button variant="ghost" size="sm" className="relative transition-colors" style={{'--hover-bg': '#d4dfe1'} as React.CSSProperties} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#d4dfe1'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
                   <Bell className="h-5 w-5" />
                   <span className="absolute -top-1 -right-1 h-3 w-3 bg-destructive rounded-full text-xs" />
                 </Button>
               </div>
+
+              {/* User Profile */}
+              <UserProfile />
             </div>
           </div>
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-auto">
+        <main className="flex-1 overflow-auto" style={{ backgroundColor: '#f4f8f9' }} suppressHydrationWarning>
           {children}
         </main>
       </div>
