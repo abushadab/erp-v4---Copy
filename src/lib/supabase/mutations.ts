@@ -1,5 +1,6 @@
 import { createClient } from './client'
 import type { Database } from './types'
+import { invalidateWarehousesCache } from './queries'
 
 type Tables = Database['public']['Tables']
 type ProductInsert = Tables['products']['Insert']
@@ -237,6 +238,10 @@ export async function createWarehouse(data: CreateWarehouseData): Promise<string
   }
 
   console.log('🎉 Warehouse created successfully:', result)
+
+  // Invalidate warehouses cache
+  invalidateWarehousesCache()
+
   return warehouseId
 }
 
@@ -275,6 +280,9 @@ export async function deleteWarehouse(warehouseId: string): Promise<void> {
   }
 
   console.log('🎉 Warehouse deleted successfully')
+
+  // Invalidate warehouses cache
+  invalidateWarehousesCache()
 }
 
 /**
@@ -299,6 +307,9 @@ export async function activateWarehouse(warehouseId: string): Promise<void> {
   }
 
   console.log('🎉 Warehouse activated successfully')
+
+  // Invalidate warehouses cache
+  invalidateWarehousesCache()
 }
 
 /**
@@ -336,6 +347,9 @@ export async function updateWarehouse(data: UpdateWarehouseData): Promise<void> 
   }
 
   console.log('🎉 Warehouse updated successfully:', result)
+
+  // Invalidate warehouses cache
+  invalidateWarehousesCache()
 }
 
 /**

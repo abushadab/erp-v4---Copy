@@ -23,10 +23,11 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { mockStockMovements, type StockMovement } from "@/lib/mock-data/erp-data"
+import { type StockMovement } from "@/lib/mock-data/erp-data"
 
 export default function StockMovementsPage() {
-  const [movements, setMovements] = React.useState<StockMovement[]>(mockStockMovements)
+  const [movements, setMovements] = React.useState<StockMovement[]>([])
+  const [loading, setLoading] = React.useState(true)
   const [searchTerm, setSearchTerm] = React.useState("")
   const [filterType, setFilterType] = React.useState<string>("all")
   const [filterDirection, setFilterDirection] = React.useState<string>("all")

@@ -99,7 +99,22 @@ export async function resetTransactionData(): Promise<void> {
 
     // Delete in proper order to avoid foreign key constraints
 
-    // 1. Delete purchase return items first (child table)
+    // 1. Delete refund transactions first (references purchase_returns and purchase_payments)
+    console.log('🗑️ Deleting refund transactions...')
+    const { error: refundTransactionsError } = await supabase
+      .from('refund_transactions')
+      .delete()
+      .gte('created_at', '1900-01-01') // Delete all records using a date condition that matches all
+
+    if (refundTransactionsError) {
+      const errorMsg = refundTransactionsError.message || JSON.stringify(refundTransactionsError)
+      if (!errorMsg.includes('does not exist')) {
+        console.error('Error deleting refund transactions:', refundTransactionsError)
+        throw new Error(`Failed to delete refund transactions: ${errorMsg}`)
+      }
+    }
+
+    // 2. Delete purchase return items (child table)
     console.log('🗑️ Deleting purchase return items...')
     const { error: purchaseReturnItemsError } = await supabase
       .from('purchase_return_items')
@@ -114,7 +129,7 @@ export async function resetTransactionData(): Promise<void> {
       }
     }
 
-    // 2. Delete purchase returns
+    // 3. Delete purchase returns (parent table)
     console.log('🗑️ Deleting purchase returns...')
     const { error: purchaseReturnsError } = await supabase
       .from('purchase_returns')
@@ -124,12 +139,12 @@ export async function resetTransactionData(): Promise<void> {
     if (purchaseReturnsError) {
       const errorMsg = purchaseReturnsError.message || JSON.stringify(purchaseReturnsError)
       if (!errorMsg.includes('does not exist')) {
-      console.error('Error deleting purchase returns:', purchaseReturnsError)
+        console.error('Error deleting purchase returns:', purchaseReturnsError)
         throw new Error(`Failed to delete purchase returns: ${errorMsg}`)
       }
     }
 
-    // 3. Delete purchase events first (they reference payments via foreign key)
+    // 4. Delete purchase events (they reference payments via foreign key)
     console.log('🗑️ Deleting purchase events...')
     const { error: purchaseEventsError } = await supabase
       .from('purchase_events')
@@ -144,7 +159,7 @@ export async function resetTransactionData(): Promise<void> {
       }
     }
 
-    // 4. Delete purchase payments (clear journal_entry_id first if needed)
+    // 5. Delete purchase payments (clear journal_entry_id first if needed)
     console.log('🗑️ Clearing journal references in purchase payments...')
     const { error: clearRefsError } = await supabase
       .from('purchase_payments')
@@ -173,7 +188,7 @@ export async function resetTransactionData(): Promise<void> {
       }
     }
 
-    // 5. Delete purchase items (child table)
+    // 6. Delete purchase items (child table)
     console.log('🗑️ Deleting purchase items...')
     const { error: purchaseItemsError } = await supabase
       .from('purchase_items')
@@ -183,12 +198,12 @@ export async function resetTransactionData(): Promise<void> {
     if (purchaseItemsError) {
       const errorMsg = purchaseItemsError.message || JSON.stringify(purchaseItemsError)
       if (!errorMsg.includes('does not exist')) {
-      console.error('Error deleting purchase items:', purchaseItemsError)
+        console.error('Error deleting purchase items:', purchaseItemsError)
         throw new Error(`Failed to delete purchase items: ${errorMsg}`)
       }
     }
 
-    // 6. Delete purchases (parent table)
+    // 7. Delete purchases (parent table)
     console.log('🗑️ Deleting purchases...')
     const { error: purchasesError } = await supabase
       .from('purchases')
@@ -198,78 +213,98 @@ export async function resetTransactionData(): Promise<void> {
     if (purchasesError) {
       const errorMsg = purchasesError.message || JSON.stringify(purchasesError)
       if (!errorMsg.includes('does not exist')) {
-      console.error('Error deleting purchases:', purchasesError)
+        console.error('Error deleting purchases:', purchasesError)
         throw new Error(`Failed to delete purchases: ${errorMsg}`)
       }
     }
 
-    // 7. Delete sale return items (if exists)
-    const { error: saleReturnItemsError } = await supabase
-      .from('sale_return_items')
+    // 8. Delete return items first (child table of returns)
+    console.log('🗑️ Deleting return items...')
+    const { error: returnItemsError } = await supabase
+      .from('return_items')
       .delete()
-      .neq('id', 'dummy') // Delete all records
+      .gte('created_at', '1900-01-01') // Delete all records using a date condition that matches all
 
-    if (saleReturnItemsError && !saleReturnItemsError.message.includes('does not exist')) {
-      console.error('Error deleting sale return items:', saleReturnItemsError)
-      throw new Error('Failed to delete sale return items')
+    if (returnItemsError) {
+      const errorMsg = returnItemsError.message || JSON.stringify(returnItemsError)
+      if (!errorMsg.includes('does not exist')) {
+        console.error('Error deleting return items:', returnItemsError)
+        throw new Error(`Failed to delete return items: ${errorMsg}`)
+      }
     }
 
-    // 8. Delete sale returns (if exists)
-    const { error: saleReturnsError } = await supabase
-      .from('sale_returns')
+    // 9. Delete returns (parent table for return_items, but child of sales)
+    console.log('🗑️ Deleting returns...')
+    const { error: returnsError } = await supabase
+      .from('returns')
       .delete()
-      .neq('id', 'dummy') // Delete all records
+      .gte('created_at', '1900-01-01') // Delete all records using a date condition that matches all
 
-    if (saleReturnsError && !saleReturnsError.message.includes('does not exist')) {
-      console.error('Error deleting sale returns:', saleReturnsError)
-      throw new Error('Failed to delete sale returns')
+    if (returnsError) {
+      const errorMsg = returnsError.message || JSON.stringify(returnsError)
+      if (!errorMsg.includes('does not exist')) {
+        console.error('Error deleting returns:', returnsError)
+        throw new Error(`Failed to delete returns: ${errorMsg}`)
+      }
     }
 
-    // 9. Delete sale items (if exists)
+    // 10. Delete sale items (child table of sales)
+    console.log('🗑️ Deleting sale items...')
     const { error: saleItemsError } = await supabase
       .from('sale_items')
       .delete()
-      .neq('id', 'dummy') // Delete all records
+      .gte('created_at', '1900-01-01') // Delete all records using a date condition that matches all
 
-    if (saleItemsError && !saleItemsError.message.includes('does not exist')) {
+    if (saleItemsError) {
+      const errorMsg = saleItemsError.message || JSON.stringify(saleItemsError)
       console.error('Error deleting sale items:', saleItemsError)
-      throw new Error('Failed to delete sale items')
+      throw new Error(`Failed to delete sale items: ${errorMsg}`)
     }
 
-    // 10. Delete sales (if exists)
+    // 11. Delete sales (now safe since returns and sale_items are deleted)
+    console.log('🗑️ Deleting sales...')
     const { error: salesError } = await supabase
       .from('sales')
       .delete()
-      .neq('id', 'dummy') // Delete all records
+      .gte('created_at', '1900-01-01') // Delete all records using a date condition that matches all
 
-    if (salesError && !salesError.message.includes('does not exist')) {
+    if (salesError) {
+      const errorMsg = salesError.message || JSON.stringify(salesError)
       console.error('Error deleting sales:', salesError)
-      throw new Error('Failed to delete sales')
+      throw new Error(`Failed to delete sales: ${errorMsg}`)
     }
 
-    // 11. Delete expenses (if exists)
+    // 12. Delete expenses
+    console.log('🗑️ Deleting expenses...')
     const { error: expensesError } = await supabase
       .from('expenses')
       .delete()
-      .neq('id', 'dummy') // Delete all records
+      .gte('created_at', '1900-01-01') // Delete all records using a date condition that matches all
 
-    if (expensesError && !expensesError.message.includes('does not exist')) {
-      console.error('Error deleting expenses:', expensesError)
-      throw new Error('Failed to delete expenses')
+    if (expensesError) {
+      const errorMsg = expensesError.message || JSON.stringify(expensesError)
+      if (!errorMsg.includes('does not exist')) {
+        console.error('Error deleting expenses:', expensesError)
+        throw new Error(`Failed to delete expenses: ${errorMsg}`)
+      }
     }
 
-    // 12. Delete stock movements (no foreign key dependencies)
+    // 13. Delete stock movements (no foreign key dependencies)
+    console.log('🗑️ Deleting stock movements...')
     const { error: movementsError } = await supabase
       .from('stock_movements')
       .delete()
-      .neq('id', 'dummy') // Delete all records
+      .gte('created_at', '1900-01-01') // Delete all records using a date condition that matches all
 
-    if (movementsError && !movementsError.message.includes('does not exist')) {
-      console.error('Error deleting stock movements:', movementsError)
-      throw new Error('Failed to delete stock movements')
+    if (movementsError) {
+      const errorMsg = movementsError.message || JSON.stringify(movementsError)
+      if (!errorMsg.includes('does not exist')) {
+        console.error('Error deleting stock movements:', movementsError)
+        throw new Error(`Failed to delete stock movements: ${errorMsg}`)
+      }
     }
 
-    // 13. Reset journal entries and account balances (since transactions are tied to accounting)
+    // 14. Reset journal entries and account balances (since transactions are tied to accounting)
     console.log('🔄 Resetting journal entries and account balances...')
     await resetAccountsData()
 

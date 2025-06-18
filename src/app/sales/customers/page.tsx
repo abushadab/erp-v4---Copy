@@ -7,6 +7,15 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
+import { Skeleton } from "@/components/ui/skeleton"
+import { 
+  Table, 
+  TableBody, 
+  TableCell, 
+  TableHead, 
+  TableHeader, 
+  TableRow 
+} from "@/components/ui/table"
 import {
   Dialog,
   DialogContent,
@@ -93,7 +102,9 @@ export default function CustomersPage() {
     const fetchCustomers = async () => {
       try {
         setIsLoading(true)
-        const data = await getCustomers()
+        // Import apiCache to use the caching mechanism
+        const { apiCache } = await import('@/lib/supabase/cache')
+        const data = await apiCache.get('all-customers', getCustomers)
         setCustomers(data)
       } catch (error) {
         console.error('Error fetching customers:', error)
@@ -153,6 +164,10 @@ export default function CustomersPage() {
         status: 'active'
       })
       
+      // Import apiCache to invalidate the cache
+      const { apiCache } = await import('@/lib/supabase/cache')
+      apiCache.invalidate('all-customers')
+      
       setCustomers([newCustomer, ...customers])
       setIsAddDialogOpen(false)
       resetForm()
@@ -182,6 +197,11 @@ export default function CustomersPage() {
         address: formData.address || null
       })
       
+      // Import apiCache to invalidate the cache
+      const { apiCache } = await import('@/lib/supabase/cache')
+      apiCache.invalidate('all-customers')
+      apiCache.invalidate(`customer-${editingCustomer.id}`)
+      
       setCustomers(customers.map(c => c.id === editingCustomer.id ? updatedCustomer : c))
       setIsEditDialogOpen(false)
       setEditingCustomer(null)
@@ -201,6 +221,12 @@ export default function CustomersPage() {
     setIsSubmitting(true)
     try {
       await deleteCustomer(deletingCustomer.id)
+      
+      // Import apiCache to invalidate the cache
+      const { apiCache } = await import('@/lib/supabase/cache')
+      apiCache.invalidate('all-customers')
+      apiCache.invalidate(`customer-${deletingCustomer.id}`)
+      
       setCustomers(customers.filter(c => c.id !== deletingCustomer.id))
       setIsDeleteDialogOpen(false)
       setDeletingCustomer(null)
@@ -254,20 +280,83 @@ export default function CustomersPage() {
   if (isLoading) {
     return (
       <div className="flex-1 space-y-6 p-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Customers</h1>
-            <p className="text-muted-foreground">
-              Manage your customer database and relationships
-            </p>
+            <Skeleton className="h-8 w-48 mb-2" />
+            <Skeleton className="h-4 w-80" />
           </div>
+          <Skeleton className="h-10 w-32" />
         </div>
-        <div className="flex items-center justify-center h-64">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
-            <p className="mt-2 text-muted-foreground">Loading customers...</p>
-          </div>
+
+        {/* Stats Cards Skeleton */}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Card key={i}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-4 w-4" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-8 w-12 mb-1" />
+                <Skeleton className="h-3 w-32" />
+              </CardContent>
+            </Card>
+          ))}
         </div>
+
+        {/* Search Skeleton */}
+        <div className="space-y-2 mb-6">
+          <Skeleton className="h-4 w-20" />
+          <Skeleton className="h-10 w-full max-w-md" />
+        </div>
+
+        {/* Table Skeleton */}
+        <Card className="shadow-sm">
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead><Skeleton className="h-4 w-24" /></TableHead>
+                    <TableHead><Skeleton className="h-4 w-20" /></TableHead>
+                    <TableHead><Skeleton className="h-4 w-16" /></TableHead>
+                    <TableHead><Skeleton className="h-4 w-16" /></TableHead>
+                    <TableHead><Skeleton className="h-4 w-24" /></TableHead>
+                    <TableHead className="text-right"><Skeleton className="h-4 w-16 ml-auto" /></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell>
+                        <div className="space-y-1">
+                          <Skeleton className="h-4 w-32" />
+                          <Skeleton className="h-3 w-24" />
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="space-y-1">
+                          <Skeleton className="h-3 w-32" />
+                          <Skeleton className="h-3 w-24" />
+                        </div>
+                      </TableCell>
+                      <TableCell><Skeleton className="h-6 w-16" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-12" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Skeleton className="h-9 w-9" />
+                          <Skeleton className="h-9 w-9" />
+                          <Skeleton className="h-9 w-9" />
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     )
   }
@@ -422,133 +511,150 @@ export default function CustomersPage() {
         </Card>
       </div>
 
-      {/* Search Bar */}
-      <div className="flex items-center justify-between">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search customers..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-        <div className="text-sm text-muted-foreground">
-          Showing {startIndex + 1}-{Math.min(endIndex, filteredCustomers.length)} of {filteredCustomers.length} customers
+      {/* Filters and Search */}
+      <div className="space-y-4 mb-6">
+        <div className="flex gap-4">
+          <div className="space-y-2 flex-1">
+            <Label htmlFor="search">Search</Label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                id="search"
+                placeholder="Search customers..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Customers List */}
-      <div className="space-y-3">
-        {currentCustomers.length > 0 ? (
-          currentCustomers.map((customer) => (
-            <Card key={customer.id}>
-              <CardContent className="p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center space-x-3">
-                        <h3 className="font-semibold text-lg">{customer.name}</h3>
+      {/* Customers Table */}
+      <Card className="shadow-sm">
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Customer</TableHead>
+                  <TableHead>Contact</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Orders</TableHead>
+                  <TableHead>Total Spent</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {currentCustomers.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                      {searchTerm 
+                        ? "No customers match your search criteria" 
+                        : "No customers have been added yet"
+                      }
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  currentCustomers.map((customer) => (
+                    <TableRow key={customer.id} className="hover:bg-muted/50 transition-colors">
+                      <TableCell>
+                        <div className="space-y-1">
+                          <div className="font-medium">{customer.name}</div>
+                          {customer.company && (
+                            <div className="text-sm text-muted-foreground flex items-center">
+                              <Building2 className="mr-1 h-3 w-3" />
+                              {customer.company}
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="space-y-1">
+                          {customer.email && (
+                            <div className="text-sm flex items-center">
+                              <Mail className="mr-1 h-3 w-3" />
+                              {customer.email}
+                            </div>
+                          )}
+                          {customer.phone && (
+                            <div className="text-sm text-muted-foreground flex items-center">
+                              <Phone className="mr-1 h-3 w-3" />
+                              {customer.phone}
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
                         <Badge variant={getStatusColor(customer.status || 'active') as any}>
                           {customer.status || 'active'}
                         </Badge>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-xl font-bold">
-                          {formatCurrency(customer.total_spent || 0)}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-sm">
                           {customer.total_orders || 0} orders
                         </div>
-                      </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm text-muted-foreground">
-                      {customer.email && (
-                        <div className="flex items-center">
-                          <Mail className="mr-2 h-3 w-3" />
-                          {customer.email}
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-medium">
+                          {formatCurrency(customer.total_spent || 0)}
                         </div>
-                      )}
-                      {customer.phone && (
-                        <div className="flex items-center">
-                          <Phone className="mr-2 h-3 w-3" />
-                          {customer.phone}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Link href={`/sales/customers/${customer.id}`}>
+                            <Button className="inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 bg-primary text-primary-foreground hover:bg-primary/90 h-9 rounded-md px-3 cursor-pointer">
+                              <Eye />
+                            </Button>
+                          </Link>
+                          
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-9 w-9 p-0"
+                            onClick={() => openEditDialog(customer)}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-9 w-9 p-0 text-destructive hover:text-destructive"
+                            onClick={() => openDeleteDialog(customer)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
-                      )}
-                      {customer.company && (
-                        <div className="flex items-center">
-                          <Building2 className="mr-2 h-3 w-3" />
-                          {customer.company}
-                        </div>
-                      )}
-                      {customer.address && (
-                        <div className="flex items-center">
-                          <MapPin className="mr-2 h-3 w-3" />
-                          {customer.address}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center space-x-2 ml-4">
-                    <Link href={`/sales/customers/${customer.id}`}>
-                      <Button variant="outline" size="sm">
-                        <Eye className="mr-1 h-3 w-3" />
-                        View
-                      </Button>
-                    </Link>
-                    
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0">
-                          <span className="sr-only">Open menu</span>
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => openEditDialog(customer)}>
-                          <Edit className="mr-2 h-4 w-4" />
-                          Edit Customer
-                        </DropdownMenuItem>
-                        <DropdownMenuItem 
-                          onClick={() => openDeleteDialog(customer)}
-                          className="text-red-600"
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete Customer
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))
-        ) : (
-          <Card>
-            <CardContent className="p-8 text-center">
-              <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No customers found</h3>
-              <p className="text-muted-foreground mb-4">
-                {searchTerm ? "Try adjusting your search terms" : "Get started by adding your first customer"}
-              </p>
-              {!searchTerm && (
-                <Button onClick={() => setIsAddDialogOpen(true)}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Customer
-                </Button>
-              )}
-            </CardContent>
-          </Card>
-        )}
-      </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+      
+      {currentCustomers.length === 0 && !searchTerm && (
+        <Card className="mt-6">
+          <CardContent className="p-8 text-center">
+            <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-semibold mb-2">No customers found</h3>
+            <p className="text-muted-foreground mb-4">
+              Get started by adding your first customer
+            </p>
+            <Button onClick={() => setIsAddDialogOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Customer
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mt-6">
           <div className="text-sm text-muted-foreground">
             Showing {startIndex + 1} to {Math.min(endIndex, filteredCustomers.length)} of{' '}
             {filteredCustomers.length} customers

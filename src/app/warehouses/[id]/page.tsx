@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Dialog,
   DialogContent,
@@ -47,6 +48,33 @@ import { getWarehouseById, type DatabaseWarehouse } from "@/lib/supabase/queries
 import { updateWarehouse, deleteWarehouse, type UpdateWarehouseData } from "@/lib/supabase/mutations"
 import { createClient } from "@/lib/supabase/client"
 
+// Global cache and request deduplication for warehouse data
+let warehouseCache: {
+  [warehouseId: string]: {
+    warehouse?: DatabaseWarehouse | null
+    stockItems?: WarehouseStockItem[]
+    lastFetch?: number
+    isLoading?: boolean
+    loadingPromise?: Promise<{
+      warehouse: DatabaseWarehouse | null
+      stockItems: WarehouseStockItem[]
+    }>
+  }
+} = {}
+
+const CACHE_DURATION = 30 * 1000 // 30 seconds
+
+// Clear cache function
+const clearWarehouseCache = (warehouseId?: string) => {
+  if (warehouseId) {
+    delete warehouseCache[warehouseId]
+    console.log(`🗑️ Cache cleared for warehouse ${warehouseId}`)
+  } else {
+    warehouseCache = {}
+    console.log('🗑️ All warehouse cache cleared')
+  }
+}
+
 interface WarehouseDetailsPageProps {
   params: Promise<{
     id: string
@@ -67,6 +95,189 @@ interface WarehouseStockItem {
   variation_id?: string
   variation_attributes?: Record<string, string>
   last_movement_at?: string
+}
+
+// Request deduplication: ensure only one set of API calls at a time per warehouse
+const getWarehouseData = async (warehouseId: string) => {
+  const now = Date.now()
+  
+  // Return cached data if valid
+  if (warehouseCache[warehouseId]?.warehouse && 
+      warehouseCache[warehouseId]?.stockItems && 
+      warehouseCache[warehouseId]?.lastFetch && 
+      (now - warehouseCache[warehouseId].lastFetch!) < CACHE_DURATION) {
+    console.log(`📋 Using cached warehouse data for ${warehouseId}`)
+    return {
+      warehouse: warehouseCache[warehouseId].warehouse!,
+      stockItems: warehouseCache[warehouseId].stockItems!
+    }
+  }
+  
+  // If already loading, return the existing promise
+  if (warehouseCache[warehouseId]?.isLoading && warehouseCache[warehouseId]?.loadingPromise) {
+    console.log(`⏳ Warehouse data already loading for ${warehouseId}, waiting for existing request...`)
+    return warehouseCache[warehouseId].loadingPromise!
+  }
+  
+  // Initialize cache entry if it doesn't exist
+  if (!warehouseCache[warehouseId]) {
+    warehouseCache[warehouseId] = {}
+  }
+  
+  // Start fresh loading
+  warehouseCache[warehouseId].isLoading = true
+  warehouseCache[warehouseId].loadingPromise = Promise.all([
+    getWarehouseById(warehouseId).catch((err: Error | unknown) => {
+      console.error(`❌ Warehouse data error for ${warehouseId}:`, err)
+      return null
+    }),
+    getWarehouseStockItems(warehouseId).catch((err: Error | unknown) => {
+      console.error(`❌ Stock data error for ${warehouseId}:`, err)
+      return []
+    })
+  ]).then(([warehouseData, stockData]) => {
+    const result = {
+      warehouse: warehouseData,
+      stockItems: stockData
+    }
+    
+    // Cache the result
+    warehouseCache[warehouseId].warehouse = warehouseData
+    warehouseCache[warehouseId].stockItems = stockData
+    warehouseCache[warehouseId].lastFetch = now
+    warehouseCache[warehouseId].isLoading = false
+    warehouseCache[warehouseId].loadingPromise = undefined
+    
+    console.log(`✅ Warehouse data loaded and cached for ${warehouseId}`)
+    return result
+  }).catch((error: Error | unknown) => {
+    warehouseCache[warehouseId].isLoading = false
+    warehouseCache[warehouseId].loadingPromise = undefined
+    throw error
+  })
+  
+  return warehouseCache[warehouseId].loadingPromise!
+}
+
+// Function to get stock items for this warehouse
+const getWarehouseStockItems = async (warehouseId: string): Promise<WarehouseStockItem[]> => {
+  const supabase = createClient()
+  
+  try {
+    console.log('🔍 Loading stock data for warehouse:', warehouseId)
+    
+    // Try to query the product_warehouse_stock table
+    const { data, error } = await supabase
+      .from('product_warehouse_stock')
+      .select(`
+        *,
+        products!inner(
+          id,
+          name,
+          sku,
+          category_id
+        )
+      `)
+      .eq('warehouse_id', warehouseId)
+      .order('current_stock', { ascending: false })
+
+    if (error) {
+      console.error('❌ Error in product_warehouse_stock query:', error)
+      console.error('Error details:', JSON.stringify(error, null, 2))
+      
+      // If there's an error, try fallback
+      console.log('🔄 Falling back to empty result...')
+      return await getFallbackWarehouseProducts(warehouseId)
+    }
+
+    console.log(`✅ Successfully fetched ${data?.length || 0} stock items for warehouse ${warehouseId}`)
+    
+    // Get category information separately for better performance
+    const categoryIds = [...new Set(data?.map(item => item.products?.category_id).filter(Boolean))]
+    let categories: any[] = []
+    
+    if (categoryIds.length > 0) {
+      const { data: categoryData } = await supabase
+        .from('categories')
+        .select('id, name')
+        .in('id', categoryIds)
+      categories = categoryData || []
+      console.log(`📂 Fetched ${categories.length} categories for stock items`)
+    }
+
+    const productStockItems = (data || []).map(item => {
+      const category = categories.find(c => c.id === item.products?.category_id)
+      return {
+        id: item.id,
+        item_id: item.product_id,
+        item_name: item.products?.name || 'Unknown Product',
+        item_sku: item.products?.sku || '',
+        item_type: 'product' as const,
+        category_name: category?.name || 'Uncategorized',
+        current_stock: item.current_stock,
+        available_stock: item.available_stock || (item.current_stock - item.reserved_stock),
+        reserved_stock: item.reserved_stock,
+        buying_price: item.buying_price || 0,
+        variation_id: item.variation_id,
+        variation_attributes: undefined, // Not needed for basic display
+        last_movement_at: item.last_movement_at
+      }
+    })
+
+    // Get packaging stock for this warehouse
+    const { data: packagingData, error: packagingError } = await supabase
+      .from('packaging_warehouse_stock')
+      .select(`
+        *,
+        packaging!inner(
+          id,
+          title,
+          sku,
+          type,
+          status
+        )
+      `)
+      .eq('warehouse_id', warehouseId)
+      .order('current_stock', { ascending: false })
+
+    if (packagingError) {
+      console.error('❌ Error fetching packaging warehouse stock:', packagingError)
+    }
+
+    const packagingStockItems = (packagingData || []).map(item => ({
+      id: item.id,
+      item_id: item.packaging_id,
+      item_name: item.packaging?.title || 'Unknown Packaging',
+      item_sku: item.packaging?.sku || '',
+      item_type: 'package' as const,
+      category_name: 'Packaging',
+      current_stock: item.current_stock,
+      available_stock: item.available_stock || (item.current_stock - item.reserved_stock),
+      reserved_stock: item.reserved_stock,
+      buying_price: item.buying_price || 0,
+      variation_id: item.variation_id,
+      variation_attributes: undefined,
+      last_movement_at: item.last_movement_at
+    }))
+
+    console.log(`✅ Successfully fetched ${productStockItems.length} product and ${packagingStockItems.length} packaging stock items for warehouse ${warehouseId}`)
+    
+    // Combine product and packaging stock
+    return [...productStockItems, ...packagingStockItems]
+  } catch (error) {
+    console.error('❌ Exception in getWarehouseStockItems:', error)
+    console.log('🔄 Using fallback method...')
+    return await getFallbackWarehouseProducts(warehouseId)
+  }
+}
+
+// Fallback function to return empty array since legacy columns are removed
+const getFallbackWarehouseProducts = async (warehouseId: string): Promise<WarehouseStockItem[]> => {
+  console.log(`📦 No stock data found for warehouse ${warehouseId}. The products table no longer has warehouse assignments.`)
+  console.log('ℹ️  Please add stock using the multi-warehouse stock management system.')
+  
+  // Return empty array since we removed the legacy columns
+  return []
 }
 
 export default function WarehouseDetailsPage({ params }: WarehouseDetailsPageProps) {
@@ -95,18 +306,10 @@ export default function WarehouseDetailsPage({ params }: WarehouseDetailsPagePro
         setLoading(true)
         console.log(`🏗️ Loading warehouse data for: ${resolvedParams.id}`)
         
-        const warehouseData = await getWarehouseById(resolvedParams.id)
+        const { warehouse: warehouseData, stockItems: stockData } = await getWarehouseData(resolvedParams.id)
         console.log('📦 Warehouse data from Supabase:', warehouseData)
         setWarehouse(warehouseData)
-
-        if (warehouseData) {
-          setStockLoading(true)
-          console.log(`📊 Loading stock data for warehouse: ${resolvedParams.id}`)
-          
-          const stockData = await getWarehouseStockItems(resolvedParams.id)
-          console.log('📈 Stock data from Supabase:', stockData)
-          setWarehouseStockItems(stockData)
-        }
+        setWarehouseStockItems(stockData)
       } catch (error) {
         console.error('❌ Error loading warehouse data:', error)
       } finally {
@@ -117,127 +320,6 @@ export default function WarehouseDetailsPage({ params }: WarehouseDetailsPagePro
 
     loadData()
   }, [resolvedParams.id])
-
-  // Function to get stock items for this warehouse
-  const getWarehouseStockItems = async (warehouseId: string): Promise<WarehouseStockItem[]> => {
-    const supabase = createClient()
-    
-    try {
-      console.log('🔍 Loading stock data for warehouse:', warehouseId)
-      
-      // Try to query the product_warehouse_stock table
-      const { data, error } = await supabase
-        .from('product_warehouse_stock')
-        .select(`
-          *,
-          products!inner(
-            id,
-            name,
-            sku,
-            category_id
-          )
-        `)
-        .eq('warehouse_id', warehouseId)
-        .order('current_stock', { ascending: false })
-
-      if (error) {
-        console.error('❌ Error in product_warehouse_stock query:', error)
-        console.error('Error details:', JSON.stringify(error, null, 2))
-        
-        // If there's an error, try fallback
-        console.log('🔄 Falling back to empty result...')
-        return await getFallbackWarehouseProducts(warehouseId)
-      }
-
-      console.log(`✅ Successfully fetched ${data?.length || 0} stock items for warehouse ${warehouseId}`)
-      
-      // Get category information separately for better performance
-      const categoryIds = [...new Set(data?.map(item => item.products?.category_id).filter(Boolean))]
-      let categories: any[] = []
-      
-      if (categoryIds.length > 0) {
-        const { data: categoryData } = await supabase
-          .from('categories')
-          .select('id, name')
-          .in('id', categoryIds)
-        categories = categoryData || []
-        console.log(`📂 Fetched ${categories.length} categories for stock items`)
-      }
-
-      const productStockItems = (data || []).map(item => {
-        const category = categories.find(c => c.id === item.products?.category_id)
-        return {
-          id: item.id,
-          item_id: item.product_id,
-          item_name: item.products?.name || 'Unknown Product',
-          item_sku: item.products?.sku || '',
-          item_type: 'product' as const,
-          category_name: category?.name || 'Uncategorized',
-          current_stock: item.current_stock,
-          available_stock: item.available_stock || (item.current_stock - item.reserved_stock),
-          reserved_stock: item.reserved_stock,
-          buying_price: item.buying_price || 0,
-          variation_id: item.variation_id,
-          variation_attributes: undefined, // Not needed for basic display
-          last_movement_at: item.last_movement_at
-        }
-      })
-
-      // Get packaging stock for this warehouse
-      const { data: packagingData, error: packagingError } = await supabase
-        .from('packaging_warehouse_stock')
-        .select(`
-          *,
-          packaging!inner(
-            id,
-            title,
-            sku,
-            type,
-            status
-          )
-        `)
-        .eq('warehouse_id', warehouseId)
-        .order('current_stock', { ascending: false })
-
-      if (packagingError) {
-        console.error('❌ Error fetching packaging warehouse stock:', packagingError)
-      }
-
-      const packagingStockItems = (packagingData || []).map(item => ({
-        id: item.id,
-        item_id: item.packaging_id,
-        item_name: item.packaging?.title || 'Unknown Packaging',
-        item_sku: item.packaging?.sku || '',
-        item_type: 'package' as const,
-        category_name: 'Packaging',
-        current_stock: item.current_stock,
-        available_stock: item.available_stock || (item.current_stock - item.reserved_stock),
-        reserved_stock: item.reserved_stock,
-        buying_price: item.buying_price || 0,
-        variation_id: item.variation_id,
-        variation_attributes: undefined,
-        last_movement_at: item.last_movement_at
-      }))
-
-      console.log(`✅ Successfully fetched ${productStockItems.length} product and ${packagingStockItems.length} packaging stock items for warehouse ${warehouseId}`)
-      
-      // Combine product and packaging stock
-      return [...productStockItems, ...packagingStockItems]
-    } catch (error) {
-      console.error('❌ Exception in getWarehouseStockItems:', error)
-      console.log('🔄 Using fallback method...')
-      return await getFallbackWarehouseProducts(warehouseId)
-    }
-  }
-
-  // Fallback function to return empty array since legacy columns are removed
-  const getFallbackWarehouseProducts = async (warehouseId: string): Promise<WarehouseStockItem[]> => {
-    console.log(`📦 No stock data found for warehouse ${warehouseId}. The products table no longer has warehouse assignments.`)
-    console.log('ℹ️  Please add stock using the multi-warehouse stock management system.')
-    
-    // Return empty array since we removed the legacy columns
-    return []
-  }
 
   // Set form data when warehouse is loaded
   React.useEffect(() => {
@@ -284,9 +366,13 @@ export default function WarehouseDetailsPage({ params }: WarehouseDetailsPagePro
 
       await updateWarehouse(updateData)
       
+      // Clear cache to force fresh data
+      clearWarehouseCache(resolvedParams.id)
+      
       // Reload warehouse data
-      const updatedWarehouse = await getWarehouseById(resolvedParams.id)
+      const { warehouse: updatedWarehouse, stockItems: updatedStockItems } = await getWarehouseData(resolvedParams.id)
       setWarehouse(updatedWarehouse)
+      setWarehouseStockItems(updatedStockItems)
       
       toast.success('Warehouse updated successfully')
       setIsEditDialogOpen(false)
@@ -354,10 +440,123 @@ export default function WarehouseDetailsPage({ params }: WarehouseDetailsPagePro
               Back
             </Button>
           </Link>
+          <div>
+            <Skeleton className="h-8 w-64 mb-2" />
+            <Skeleton className="h-4 w-48" />
+          </div>
         </div>
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin" />
+        
+        {/* Skeleton for warehouse details layout */}
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {/* Warehouse Information Skeleton */}
+          <Card className="md:col-span-2">
+            <CardHeader>
+              <Skeleton className="h-6 w-48" />
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-4">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i}>
+                      <Skeleton className="h-4 w-24 mb-1" />
+                      <Skeleton className="h-6 w-40" />
+                    </div>
+                  ))}
+                </div>
+                <div className="space-y-4">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <div key={i}>
+                      <Skeleton className="h-4 w-24 mb-1" />
+                      <Skeleton className="h-6 w-40" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Stock Summary Skeleton */}
+          <div className="space-y-4">
+            {/* Capacity Card */}
+            <Card>
+              <CardHeader>
+                <Skeleton className="h-5 w-40" />
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} className="flex justify-between">
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-4 w-16" />
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            {/* Current Stock Card */}
+            <Card>
+              <CardHeader className="pb-2">
+                <Skeleton className="h-5 w-32" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-8 w-24 mb-1" />
+                <Skeleton className="h-3 w-32" />
+              </CardContent>
+            </Card>
+
+            {/* Available Stock Card */}
+            <Card>
+              <CardHeader className="pb-2">
+                <Skeleton className="h-5 w-32" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-8 w-24 mb-1" />
+                <Skeleton className="h-3 w-32" />
+              </CardContent>
+            </Card>
+
+            {/* Reserved Stock Card */}
+            <Card>
+              <CardHeader className="pb-2">
+                <Skeleton className="h-5 w-32" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-8 w-24 mb-1" />
+                <Skeleton className="h-3 w-32" />
+              </CardContent>
+            </Card>
+          </div>
         </div>
+
+        {/* Items in Warehouse Table Skeleton */}
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-64 mb-1" />
+            <Skeleton className="h-4 w-96" />
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-md border">
+              <div className="p-4">
+                <div className="flex items-center justify-between gap-4 pb-4">
+                  {Array.from({ length: 7 }).map((_, i) => (
+                    <Skeleton key={i} className="h-5 w-24" />
+                  ))}
+                </div>
+                
+                {Array.from({ length: 5 }).map((_, rowIndex) => (
+                  <div key={rowIndex} className="flex items-center justify-between gap-4 py-3 border-t">
+                    <Skeleton className="h-5 w-40" />
+                    <Skeleton className="h-5 w-24" />
+                    <Skeleton className="h-5 w-24" />
+                    <Skeleton className="h-5 w-16" />
+                    <Skeleton className="h-5 w-16" />
+                    <Skeleton className="h-5 w-16" />
+                    <Skeleton className="h-5 w-24" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     )
   }
@@ -712,8 +911,26 @@ export default function WarehouseDetailsPage({ params }: WarehouseDetailsPagePro
         
         <CardContent>
           {stockLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-8 w-8 animate-spin" />
+            <div className="rounded-md border">
+              <div className="p-4">
+                <div className="flex items-center justify-between gap-4 pb-4">
+                  {Array.from({ length: 7 }).map((_, i) => (
+                    <Skeleton key={i} className="h-5 w-24" />
+                  ))}
+                </div>
+                
+                {Array.from({ length: 5 }).map((_, rowIndex) => (
+                  <div key={rowIndex} className="flex items-center justify-between gap-4 py-3 border-t">
+                    <Skeleton className="h-5 w-40" />
+                    <Skeleton className="h-5 w-24" />
+                    <Skeleton className="h-5 w-24" />
+                    <Skeleton className="h-5 w-16" />
+                    <Skeleton className="h-5 w-16" />
+                    <Skeleton className="h-5 w-16" />
+                    <Skeleton className="h-5 w-24" />
+                  </div>
+                ))}
+              </div>
             </div>
           ) : warehouseStockItems.length > 0 ? (
             <Table>

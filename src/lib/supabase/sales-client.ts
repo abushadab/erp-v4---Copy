@@ -3,6 +3,7 @@ import type { Database, Customer, Sale, SaleItem, Return, ReturnItem, SaleWithIt
 import { transformDatabaseProductToProduct } from './transforms'
 import type { Product, ProductVariation, Packaging, PackagingVariation } from '../mock-data/erp-data'
 import { createSaleJournalEntry, createReturnJournalEntry } from './accounts-client'
+import { apiCache } from './cache'
 
 export type { Customer, Sale, SaleItem, Return, ReturnItem, SaleWithItems, ReturnWithItems }
 
@@ -19,16 +20,11 @@ function getSupabaseClient() {
 
 const supabase = getSupabaseClient()
 
-// Warehouse operations
-export const getWarehouses = async () => {
-  const { data, error } = await supabase
-    .from('warehouses')
-    .select('*')
-    .eq('status', 'active')
-    .order('name')
+// Warehouse operations - use cached version from queries
+import { getActiveWarehouses } from './queries'
 
-  if (error) throw error
-  return data
+export const getWarehouses = async () => {
+  return await getActiveWarehouses()
 }
 
 // Product operations
@@ -385,14 +381,17 @@ export const getCustomers = async () => {
 }
 
 export const getCustomerById = async (id: string) => {
-  const { data, error } = await supabase
-    .from('customers')
-    .select('*')
-    .eq('id', id)
-    .single()
+  // Use the apiCache to avoid duplicate requests
+  return await apiCache.get(`customer-${id}`, async () => {
+    const { data, error } = await supabase
+      .from('customers')
+      .select('*')
+      .eq('id', id)
+      .single()
 
-  if (error) throw error
-  return data
+    if (error) throw error
+    return data
+  })
 }
 
 export const createCustomer = async (customer: Database['public']['Tables']['customers']['Insert']) => {

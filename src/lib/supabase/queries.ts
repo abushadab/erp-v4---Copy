@@ -286,20 +286,69 @@ export async function getCategories(): Promise<DatabaseCategory[]> {
   return data || []
 }
 
-export async function getWarehouses(): Promise<DatabaseWarehouse[]> {
-  const supabase = createClient()
-  
-  const { data, error } = await supabase
-    .from('warehouses')
-    .select('*')
-    .order('name')
+// Global cache for warehouses to prevent duplicate API calls
+let warehousesCache: {
+  data: DatabaseWarehouse[] | null
+  timestamp: number
+  promise: Promise<DatabaseWarehouse[]> | null
+} = {
+  data: null,
+  timestamp: 0,
+  promise: null
+}
 
-  if (error) {
-    console.error('Error fetching warehouses:', error)
-    throw new Error('Failed to fetch warehouses')
+const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
+
+export async function getWarehouses(): Promise<DatabaseWarehouse[]> {
+  const now = Date.now()
+
+  // Return cached data if it's still fresh
+  if (warehousesCache.data && (now - warehousesCache.timestamp) < CACHE_DURATION) {
+    console.log('🏭 Using cached warehouses data')
+    return warehousesCache.data
   }
 
-  return data || []
+  // If there's already a request in progress, wait for it
+  if (warehousesCache.promise) {
+    console.log('🏭 Warehouses request already in progress, waiting...')
+    return warehousesCache.promise
+  }
+
+  // Create new request promise
+  const requestPromise = (async (): Promise<DatabaseWarehouse[]> => {
+    try {
+      console.log('🏭 Fetching fresh warehouses data from API')
+      const supabase = createClient()
+
+      const { data, error } = await supabase
+        .from('warehouses')
+        .select('*')
+        .order('name')
+
+      if (error) {
+        console.error('Error fetching warehouses:', error)
+        throw new Error('Failed to fetch warehouses')
+      }
+
+      const result = data || []
+
+      // Update cache with result
+      warehousesCache.data = result
+      warehousesCache.timestamp = now
+      warehousesCache.promise = null
+
+      return result
+    } catch (error) {
+      // Clear promise on error so next call can retry
+      warehousesCache.promise = null
+      throw error
+    }
+  })()
+
+  // Store the promise
+  warehousesCache.promise = requestPromise
+
+  return requestPromise
 }
 
 export async function getWarehouseById(id: string): Promise<DatabaseWarehouse | null> {
@@ -322,21 +371,18 @@ export async function getWarehouseById(id: string): Promise<DatabaseWarehouse | 
   return data
 }
 
+// Cache invalidation function
+export function invalidateWarehousesCache(): void {
+  console.log('🗑️ Invalidating warehouses cache')
+  warehousesCache.data = null
+  warehousesCache.timestamp = 0
+  warehousesCache.promise = null
+}
+
 export async function getActiveWarehouses(): Promise<DatabaseWarehouse[]> {
-  const supabase = createClient()
-  
-  const { data, error } = await supabase
-    .from('warehouses')
-    .select('*')
-    .eq('status', 'active')
-    .order('name')
-
-  if (error) {
-    console.error('Error fetching active warehouses:', error)
-    throw new Error('Failed to fetch active warehouses')
-  }
-
-  return data || []
+  // Get all warehouses from cache and filter active ones
+  const allWarehouses = await getWarehouses()
+  return allWarehouses.filter(warehouse => warehouse.status === 'active')
 }
 
 export async function getAttributes(): Promise<DatabaseAttribute[]> {

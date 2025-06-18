@@ -1,7 +1,6 @@
 "use client"
 
 import React, { useState, useEffect } from 'react'
-import { motion } from "framer-motion"
 import { format } from "date-fns"
 import { Calendar as CalendarIcon } from "lucide-react"
 import { Calendar } from "@/components/ui/calendar"
@@ -16,6 +15,7 @@ import {
 } from "@/components/ui/popover"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Skeleton } from "@/components/ui/skeleton"
 import { 
   Table, 
   TableBody, 
@@ -45,7 +45,9 @@ import {
   Receipt,
   TrendingUp,
   DollarSign,
-  Save
+  Save,
+  Eye,
+  Edit
 } from "lucide-react"
 import { toast } from "sonner"
 import { getExpenses, getActiveExpenseTypes, createExpense, updateExpense, deleteExpense, type Expense, type ExpenseType } from '@/lib/supabase/expenses-client'
@@ -53,6 +55,9 @@ import { cn } from "@/lib/utils"
 import Link from 'next/link'
 
 export default function ExpensesPage() {
+  // Ref to track if initial load has been triggered
+  const initialLoadTriggered = React.useRef(false)
+  
   const [loading, setLoading] = useState(true)
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [expenseTypes, setExpenseTypes] = useState<ExpenseType[]>([])
@@ -76,12 +81,20 @@ export default function ExpensesPage() {
     description: ''
   })
 
-  // Load data on component mount
+  // Load data on component mount only once
   useEffect(() => {
-    loadData()
-  }, [])
+    console.log('🚀 useEffect triggered - mounting expenses component')
+    if (!initialLoadTriggered.current) {
+      console.log('🎯 First time loading - triggering data fetch')
+      initialLoadTriggered.current = true
+      loadData()
+    } else {
+      console.log('⚠️ useEffect called again but initial load already triggered')
+    }
+  }, []) // Empty dependency array to run only once on mount
 
   const loadData = async () => {
+    console.log('🔄 loadData called in expenses page')
     try {
       setLoading(true)
       const [expensesData, expenseTypesData] = await Promise.all([
@@ -90,8 +103,9 @@ export default function ExpensesPage() {
       ])
       setExpenses(expensesData)
       setExpenseTypes(expenseTypesData)
+      console.log('✅ Expenses data loaded successfully')
     } catch (error) {
-      console.error('Error loading data:', error)
+      console.error('❌ Error loading expenses data:', error)
       toast.error('Failed to load data')
     } finally {
       setLoading(false)
@@ -290,40 +304,134 @@ export default function ExpensesPage() {
     })
   }
 
-  return (
-    <div className="container mx-auto p-6 space-y-6">
-      {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-      >
-        <div className="flex justify-between items-center">
+  // Skeleton loading state
+  if (loading) {
+    return (
+      <div className="container mx-auto px-6 py-8">
+        {/* Header Skeleton */}
+        <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Expenses</h1>
-            <p className="text-muted-foreground">Manage and track your business expenses</p>
+            <Skeleton className="h-8 w-48 mb-2" />
+            <Skeleton className="h-4 w-80" />
           </div>
           <div className="flex gap-2">
-            <Link href="/expenses/types">
-              <Button variant="outline">
-                Expense Types
-              </Button>
-            </Link>
-            <Button onClick={() => setIsAddModalOpen(true)}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Expense
-            </Button>
+            <Skeleton className="h-10 w-32" />
+            <Skeleton className="h-10 w-32" />
           </div>
         </div>
-      </motion.div>
+
+        {/* Stats Cards Skeleton */}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Card key={i}>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-4 w-4" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-8 w-12 mb-1" />
+                <Skeleton className="h-3 w-32" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* Filters Skeleton */}
+        <div className="flex gap-4 mb-6">
+          <div className="space-y-2 flex-1">
+            <Skeleton className="h-4 w-20" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-20" />
+            <Skeleton className="h-10 w-48" />
+          </div>
+        </div>
+
+        {/* Table Skeleton */}
+        <Card className="shadow-sm">
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>
+                      <Skeleton className="h-4 w-20" />
+                    </TableHead>
+                    <TableHead>
+                      <Skeleton className="h-4 w-16" />
+                    </TableHead>
+                    <TableHead>
+                      <Skeleton className="h-4 w-16" />
+                    </TableHead>
+                    <TableHead>
+                      <Skeleton className="h-4 w-24" />
+                    </TableHead>
+                    <TableHead className="text-right">
+                      <Skeleton className="h-4 w-16 ml-auto" />
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell>
+                        <div className="space-y-1">
+                          <Skeleton className="h-4 w-24" />
+                          <Skeleton className="h-3 w-20" />
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-4 w-20" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-4 w-16" />
+                      </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-4 w-32" />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Skeleton className="h-8 w-8" />
+                          <Skeleton className="h-8 w-8" />
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  return (
+    <div className="container mx-auto px-6 py-8">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Expenses</h1>
+          <p className="text-muted-foreground mt-2">
+            Manage and track your business expenses
+          </p>
+        </div>
+        <div className="mt-4 sm:mt-0 flex gap-2">
+          <Link href="/expenses/types">
+            <Button variant="outline" className="cursor-pointer">
+              Expense Types
+            </Button>
+          </Link>
+          <Button onClick={() => setIsAddModalOpen(true)} className="cursor-pointer">
+            <Plus className="mr-2 h-4 w-4" />
+            Add Expense
+          </Button>
+        </div>
+      </div>
 
       {/* Stats Cards */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.1 }}
-        className="grid gap-4 md:grid-cols-2 lg:grid-cols-4"
-      >
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Expenses</CardTitle>
@@ -368,7 +476,7 @@ export default function ExpensesPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Categories</CardTitle>
-                            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
@@ -379,143 +487,175 @@ export default function ExpensesPage() {
             </p>
           </CardContent>
         </Card>
-      </motion.div>
+      </div>
 
       {/* Search and Filter */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.2 }}
-        className="flex gap-4"
-      >
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search expenses..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
-        </div>
-        <Popover>
-          <PopoverTrigger asChild>
-            <Button variant="outline" className="justify-start text-left font-normal">
-              <CalendarIcon className="mr-2 h-4 w-4" />
-              {dateRange.from ? (
-                dateRange.to ? (
-                  <>
-                    {format(dateRange.from, "LLL dd, y")} -{" "}
-                    {format(dateRange.to, "LLL dd, y")}
-                  </>
-                ) : (
-                  format(dateRange.from, "LLL dd, y")
-                )
-              ) : (
-                <span>Date Range</span>
-              )}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="end">
-            <Calendar
-              initialFocus
-              mode="range"
-              defaultMonth={dateRange.from}
-              selected={dateRange}
-              onSelect={(range) => setDateRange({ 
-                from: range?.from, 
-                to: range?.to 
-              })}
-              numberOfMonths={2}
+      <div className="flex flex-col md:flex-row gap-4 mb-6">
+        <div className="space-y-2 flex-1">
+          <Label htmlFor="search">Search</Label>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              id="search"
+              placeholder="Search expenses by type, description, or amount..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
             />
-            <div className="p-3 border-t border-border">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setDateRange({ from: undefined, to: undefined })}
-                className="w-full"
+          </div>
+        </div>
+        
+        <div className="space-y-2">
+          <Label htmlFor="date-range">Date Range</Label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button 
+                id="date-range"
+                variant="outline" 
+                className="w-full justify-start text-left font-normal bg-white border border-gray-300 hover:bg-gray-50"
               >
-                Clear dates
+                <CalendarIcon className="mr-2 h-4 w-4 text-gray-500" />
+                <span className="text-gray-700">
+                  {dateRange.from ? (
+                    dateRange.to ? (
+                      <>
+                        {format(dateRange.from, "MMM dd, y")} - {format(dateRange.to, "MMM dd, y")}
+                      </>
+                    ) : (
+                      format(dateRange.from, "MMM dd, y")
+                    )
+                  ) : (
+                    "Select date range"
+                  )}
+                </span>
               </Button>
-            </div>
-          </PopoverContent>
-        </Popover>
-      </motion.div>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="end">
+              <Calendar
+                initialFocus
+                mode="range"
+                defaultMonth={dateRange.from}
+                selected={dateRange}
+                onSelect={(range) => setDateRange({ 
+                  from: range?.from, 
+                  to: range?.to 
+                })}
+                numberOfMonths={2}
+              />
+              <div className="p-3 border-t border-border">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setDateRange({ from: undefined, to: undefined })}
+                  className="w-full"
+                >
+                  Clear dates
+                </Button>
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
+      </div>
+
+      {/* Expense Count */}
+      <div className="mb-4">
+        <p className="text-sm text-muted-foreground">
+          {filteredExpenses.length} of {expenses.length} expenses
+        </p>
+      </div>
 
       {/* Expenses Table */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.3 }}
-      >
-        <Card>
-          <CardHeader>
-            <CardTitle>Expense Records</CardTitle>
-            <CardDescription>
-              A list of all your business expenses
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead className="w-[100px]">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredExpenses.map((expense) => (
-                  <TableRow key={expense.id}>
-                    <TableCell>
-                      <Badge variant="secondary">
-                        {expense.expense_type_name}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="font-medium">
-                      {formatCurrency(expense.amount)}
-                    </TableCell>
-                    <TableCell>{formatDate(expense.expense_date)}</TableCell>
-                    <TableCell className="max-w-[200px] truncate">
-                      {expense.description || '-'}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleViewExpense(expense)}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleEditExpense(expense)}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setExpenseToDelete(expense)
-                            setIsDeleteModalOpen(true)
-                          }}
-                          className="text-destructive hover:text-destructive"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
+      <Card className="shadow-sm">
+        <CardContent className="p-0">
+          {filteredExpenses.length > 0 ? (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Expense Type / Date</TableHead>
+                    <TableHead>Amount</TableHead>
+                    <TableHead>Created By</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      </motion.div>
+                </TableHeader>
+                <TableBody>
+                  {filteredExpenses.map((expense) => (
+                    <TableRow key={expense.id} className="hover:bg-gray-50">
+                      <TableCell>
+                        <div>
+                          <div className="font-medium">
+                            <Badge variant="secondary">
+                              {expense.expense_type_name}
+                            </Badge>
+                          </div>
+                          <div className="text-sm text-muted-foreground">
+                            {formatDate(expense.expense_date)}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-medium">{formatCurrency(expense.amount)}</div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-sm">{expense.created_by || 'System'}</div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-sm max-w-[200px] truncate">
+                          {expense.description || '-'}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleViewExpense(expense)}
+                            className="cursor-pointer"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEditExpense(expense)}
+                            className="cursor-pointer"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setExpenseToDelete(expense)
+                              setIsDeleteModalOpen(true)
+                            }}
+                            className="cursor-pointer text-destructive hover:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <div className="text-center py-10">
+              <Receipt className="mx-auto h-12 w-12 text-gray-400" />
+              <h3 className="mt-2 text-sm font-semibold text-gray-900">No expenses</h3>
+              <p className="mt-1 text-sm text-gray-500">Get started by adding a new expense.</p>
+              <div className="mt-6">
+                <Button onClick={() => setIsAddModalOpen(true)} className="cursor-pointer">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Expense
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* View Expense Modal */}
       <Dialog open={isViewModalOpen} onOpenChange={setIsViewModalOpen}>

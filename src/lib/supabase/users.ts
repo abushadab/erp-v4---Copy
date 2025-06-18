@@ -23,24 +23,96 @@ export async function getAllUsersWithRoles(): Promise<ExtendedUser[]> {
   }
 }
 
+// Global cache for user permissions to prevent duplicate API calls
+const userPermissionsCache = new Map<string, {
+  data: ExtendedUser | null;
+  timestamp: number;
+  promise?: Promise<ExtendedUser | null>;
+}>();
+
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
 /**
- * Get a specific user with their roles and permissions
+ * Get a specific user with their roles and permissions (with caching)
  */
 export async function getUserWithPermissions(userId: string): Promise<ExtendedUser | null> {
-  try {
-    const { data, error } = await createClient().rpc('get_user_with_permissions', {
-      user_id: userId
-    })
-    
-    if (error) {
-      console.error('Error fetching user:', error)
-      throw error
+  console.log('🔍 getUserWithPermissions called for userId:', userId);
+  
+  const now = Date.now();
+  const cached = userPermissionsCache.get(userId);
+  
+  // Return cached data if it's fresh
+  if (cached && (now - cached.timestamp) < CACHE_DURATION) {
+    console.log('📦 Using cached user permissions data for:', userId);
+    return cached.data;
+  }
+  
+  // If there's already a request in progress, wait for it
+  if (cached?.promise) {
+    console.log('⏳ Request already in progress for user:', userId, '- waiting for existing promise...');
+    return await cached.promise;
+  }
+  
+  // Create new request promise
+  const requestPromise = (async (): Promise<ExtendedUser | null> => {
+    try {
+      console.log('🔄 Fetching fresh user permissions data from API for:', userId);
+      
+      const { data, error } = await createClient().rpc('get_user_with_permissions', {
+        user_id: userId
+      });
+      
+      if (error) {
+        console.error('Error fetching user:', error);
+        throw error;
+      }
+      
+      const result = data?.[0] || null;
+      
+      // Update cache with result
+      userPermissionsCache.set(userId, {
+        data: result,
+        timestamp: now,
+        promise: undefined
+      });
+      
+      console.log('✅ User permissions data fetched and cached for:', userId);
+      return result;
+    } catch (error) {
+      // Remove the promise from cache on error so next call can retry
+      const currentCached = userPermissionsCache.get(userId);
+      if (currentCached) {
+        userPermissionsCache.set(userId, {
+          ...currentCached,
+          promise: undefined
+        });
+      }
+      
+      console.error('❌ Error in getUserWithPermissions for user:', userId, error);
+      throw error;
     }
-    
-    return data?.[0] || null
-  } catch (error) {
-    console.error('Error in getUserWithPermissions:', error)
-    throw error
+  })();
+  
+  // Store the promise in cache
+  userPermissionsCache.set(userId, {
+    data: cached?.data || null,
+    timestamp: cached?.timestamp || 0,
+    promise: requestPromise
+  });
+  
+  return await requestPromise;
+}
+
+/**
+ * Clear user permissions cache (useful after role changes)
+ */
+export function clearUserPermissionsCache(userId?: string): void {
+  if (userId) {
+    console.log('🗑️ Clearing user permissions cache for:', userId);
+    userPermissionsCache.delete(userId);
+  } else {
+    console.log('🗑️ Clearing all user permissions cache');
+    userPermissionsCache.clear();
   }
 }
 
@@ -100,6 +172,9 @@ export async function assignRoleToUser(userId: string, roleId: string): Promise<
       console.error('Error assigning role to user:', error)
       throw error
     }
+    
+    // Clear cache for this user since their permissions changed
+    clearUserPermissionsCache(userId);
   } catch (error) {
     console.error('Error in assignRoleToUser:', error)
     throw error
@@ -120,6 +195,9 @@ export async function removeRoleFromUser(userId: string, roleId: string): Promis
       console.error('Error removing role from user:', error)
       throw error
     }
+    
+    // Clear cache for this user since their permissions changed
+    clearUserPermissionsCache(userId);
   } catch (error) {
     console.error('Error in removeRoleFromUser:', error)
     throw error

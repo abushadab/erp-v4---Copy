@@ -361,7 +361,7 @@ export default function DashboardPage() {
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             {/* Total Revenue */}
             <StaggerItem>
-              <AnimatedCard>
+              <AnimatedCard noHover={true}>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
                   <TrendingUp className="h-4 w-4 text-muted-foreground" />
@@ -380,7 +380,7 @@ export default function DashboardPage() {
 
             {/* Total Profit */}
             <StaggerItem>
-              <AnimatedCard>
+              <AnimatedCard noHover={true}>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Net Income</CardTitle>
                   <TrendingUp className="h-4 w-4 text-muted-foreground" />
@@ -399,7 +399,7 @@ export default function DashboardPage() {
 
             {/* Total Purchases */}
             <StaggerItem>
-              <AnimatedCard>
+              <AnimatedCard noHover={true}>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Purchases</CardTitle>
                   <ShoppingCart className="h-4 w-4 text-muted-foreground" />
@@ -418,7 +418,7 @@ export default function DashboardPage() {
 
             {/* Total Expenses */}
             <StaggerItem>
-              <AnimatedCard>
+              <AnimatedCard noHover={true}>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Expenses</CardTitle>
                   <Receipt className="h-4 w-4 text-muted-foreground" />
@@ -442,7 +442,7 @@ export default function DashboardPage() {
           <div className="grid gap-6 md:grid-cols-3">
             {/* Assets */}
             <StaggerItem>
-              <AnimatedCard>
+              <AnimatedCard noHover={true}>
                 <CardHeader>
                   <CardTitle className="flex items-center">
                     <Building2 className="mr-2 h-5 w-5" />
@@ -462,7 +462,7 @@ export default function DashboardPage() {
 
             {/* Liabilities */}
             <StaggerItem>
-              <AnimatedCard>
+              <AnimatedCard noHover={true}>
                 <CardHeader>
                   <CardTitle className="flex items-center">
                     <CreditCard className="mr-2 h-5 w-5" />
@@ -482,7 +482,7 @@ export default function DashboardPage() {
 
             {/* Net Worth */}
                         <StaggerItem>
-              <AnimatedCard>
+              <AnimatedCard noHover={true}>
                 <CardHeader>
                   <CardTitle className="flex items-center">
                     <TrendingUp className="mr-2 h-5 w-5" />
@@ -507,7 +507,7 @@ export default function DashboardPage() {
           <div className="grid gap-6 md:grid-cols-2">
             {/* Sales Overview */}
             <StaggerItem>
-              <AnimatedCard>
+              <AnimatedCard noHover={true}>
                 <CardHeader>
                   <CardTitle>Sales Overview</CardTitle>
                   <CardDescription>Sales performance summary</CardDescription>
@@ -535,7 +535,7 @@ export default function DashboardPage() {
 
             {/* Purchases Overview */}
             <StaggerItem>
-              <AnimatedCard>
+              <AnimatedCard noHover={true}>
                 <CardHeader>
                   <CardTitle>Purchases Overview</CardTitle>
                   <CardDescription>Purchase orders summary</CardDescription>
@@ -567,7 +567,7 @@ export default function DashboardPage() {
         {stats.expenses?.expensesByType && Object.keys(stats.expenses.expensesByType).length > 0 && (
           <StaggerContainer delay={0.2}>
             <StaggerItem>
-              <AnimatedCard>
+              <AnimatedCard noHover={true}>
                 <CardHeader>
                   <CardTitle>Expense Breakdown</CardTitle>
                   <CardDescription>Expenses by category</CardDescription>

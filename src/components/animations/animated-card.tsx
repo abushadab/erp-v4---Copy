@@ -8,16 +8,17 @@ import { forwardRef } from 'react'
 interface AnimatedCardProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode
   disabled?: boolean
+  noHover?: boolean
 }
 
 export const AnimatedCard = forwardRef<HTMLDivElement, AnimatedCardProps>(
-  ({ children, disabled = false, className, ...props }, ref) => {
+  ({ children, disabled = false, noHover = false, className, ...props }, ref) => {
     return (
       <motion.div
         ref={ref}
         variants={cardHoverVariants}
         initial="initial"
-        whileHover={disabled ? "initial" : "hover"}
+        whileHover={(disabled || noHover) ? "initial" : "hover"}
         className={className}
       >
         <Card {...props}>

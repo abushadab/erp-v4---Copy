@@ -200,21 +200,11 @@ export async function getSuppliers(): Promise<DatabaseSupplier[]> {
   return data || []
 }
 
+// Use cached version from queries to prevent duplicate API calls
+import { getActiveWarehouses } from './queries'
+
 export async function getWarehouses(): Promise<DatabaseWarehouse[]> {
-  const supabase = createClient()
-  
-  const { data, error } = await supabase
-    .from('warehouses')
-    .select('*')
-    .eq('status', 'active')
-    .order('name')
-
-  if (error) {
-    console.error('Error fetching warehouses:', error)
-    throw new Error('Failed to fetch warehouses')
-  }
-
-  return data || []
+  return await getActiveWarehouses()
 }
 
 // New interface for purchase returns with refund data

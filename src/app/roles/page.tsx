@@ -14,7 +14,8 @@ import {
   DialogDescription,
   DialogFooter,
   DialogHeader,
-  DialogTitle
+  DialogTitle,
+  DialogTrigger
 } from "@/components/ui/dialog"
 import {
   Select,
@@ -28,7 +29,8 @@ import {
   DropdownMenuContent,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuTrigger
+  DropdownMenuTrigger,
+  DropdownMenuItem
 } from "@/components/ui/dropdown-menu"
 import {
   Table,
@@ -49,7 +51,9 @@ import {
   Loader2,
   CheckCircle,
   XCircle,
-  AlertTriangle
+  AlertTriangle,
+  Eye,
+  Edit
 } from "lucide-react"
 import {
   getAllUsersWithRoles,
@@ -73,8 +77,7 @@ import { NotificationContainer } from "@/components/ui/notification"
 import { createClient } from '@/lib/supabase/client';
 import type { ExtendedUser } from '@/lib/types/supabase-types';
 
-// Use environment variable to determine data source
-const USE_SUPABASE = process.env.NEXT_PUBLIC_USE_SUPABASE === 'true'
+// Always use Supabase for data
 
 // Simple in-memory cache to avoid duplicate API calls during React Strict Mode remounts
 const dataCache = {
@@ -86,105 +89,7 @@ const dataCache = {
 }
 const CACHE_DURATION = 30_000 // 30 seconds
 
-// Mock data for roles when not using Supabase
-const mockRoles: Role[] = [
-  {
-    id: '1',
-    name: 'admin',
-    description: 'Full system access with all permissions',
-    status: 'active',
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-01T00:00:00Z'
-  },
-  {
-    id: '2',
-    name: 'manager',
-    description: 'Management level access with most permissions',
-    status: 'active',
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-01T00:00:00Z'
-  },
-  {
-    id: '3',
-    name: 'sales',
-    description: 'Sales team access with customer and order management',
-    status: 'active',
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-01T00:00:00Z'
-  },
-  {
-    id: '4',
-    name: 'warehouse',
-    description: 'Warehouse operations and inventory management',
-    status: 'active',
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-01T00:00:00Z'
-  },
-  {
-    id: '5',
-    name: 'accountant',
-    description: 'Financial and accounting operations',
-    status: 'active',
-    created_at: '2024-01-01T00:00:00Z',
-    updated_at: '2024-01-01T00:00:00Z'
-  }
-]
 
-// Mock permissions data
-const mockPermissions: Permission[] = [
-  // Users permissions
-  { id: '1', module: 'users', action: 'create', description: 'Create new users', created_at: '2024-01-01T00:00:00Z' },
-  { id: '2', module: 'users', action: 'read', description: 'View user information', created_at: '2024-01-01T00:00:00Z' },
-  { id: '3', module: 'users', action: 'update', description: 'Update user information', created_at: '2024-01-01T00:00:00Z' },
-  { id: '4', module: 'users', action: 'delete', description: 'Delete users', created_at: '2024-01-01T00:00:00Z' },
-  
-  // Products permissions
-  { id: '5', module: 'products', action: 'create', description: 'Create new products', created_at: '2024-01-01T00:00:00Z' },
-  { id: '6', module: 'products', action: 'read', description: 'View product information', created_at: '2024-01-01T00:00:00Z' },
-  { id: '7', module: 'products', action: 'update', description: 'Update product information', created_at: '2024-01-01T00:00:00Z' },
-  { id: '8', module: 'products', action: 'delete', description: 'Delete products', created_at: '2024-01-01T00:00:00Z' },
-  
-  // Sales permissions
-  { id: '9', module: 'sales', action: 'create', description: 'Create new sales', created_at: '2024-01-01T00:00:00Z' },
-  { id: '10', module: 'sales', action: 'read', description: 'View sales information', created_at: '2024-01-01T00:00:00Z' },
-  { id: '11', module: 'sales', action: 'update', description: 'Update sales information', created_at: '2024-01-01T00:00:00Z' },
-  { id: '12', module: 'sales', action: 'delete', description: 'Delete sales', created_at: '2024-01-01T00:00:00Z' },
-  
-  // Purchases permissions
-  { id: '13', module: 'purchases', action: 'create', description: 'Create new purchases', created_at: '2024-01-01T00:00:00Z' },
-  { id: '14', module: 'purchases', action: 'read', description: 'View purchase information', created_at: '2024-01-01T00:00:00Z' },
-  { id: '15', module: 'purchases', action: 'update', description: 'Update purchase information', created_at: '2024-01-01T00:00:00Z' },
-  { id: '16', module: 'purchases', action: 'delete', description: 'Delete purchases', created_at: '2024-01-01T00:00:00Z' },
-  
-  // Inventory permissions
-  { id: '17', module: 'inventory', action: 'create', description: 'Create inventory entries', created_at: '2024-01-01T00:00:00Z' },
-  { id: '18', module: 'inventory', action: 'read', description: 'View inventory information', created_at: '2024-01-01T00:00:00Z' },
-  { id: '19', module: 'inventory', action: 'update', description: 'Update inventory information', created_at: '2024-01-01T00:00:00Z' },
-  { id: '20', module: 'inventory', action: 'delete', description: 'Delete inventory entries', created_at: '2024-01-01T00:00:00Z' },
-  
-  // Reports permissions
-  { id: '21', module: 'reports', action: 'read', description: 'View reports', created_at: '2024-01-01T00:00:00Z' },
-  { id: '22', module: 'reports', action: 'export', description: 'Export reports', created_at: '2024-01-01T00:00:00Z' },
-  
-  // Settings permissions
-  { id: '23', module: 'settings', action: 'read', description: 'View system settings', created_at: '2024-01-01T00:00:00Z' },
-  { id: '24', module: 'settings', action: 'update', description: 'Update system settings', created_at: '2024-01-01T00:00:00Z' },
-  
-  // Accounting permissions
-  { id: '25', module: 'accounting', action: 'create', description: 'Create accounting entries', created_at: '2024-01-01T00:00:00Z' },
-  { id: '26', module: 'accounting', action: 'read', description: 'View accounting information', created_at: '2024-01-01T00:00:00Z' },
-  { id: '27', module: 'accounting', action: 'update', description: 'Update accounting entries', created_at: '2024-01-01T00:00:00Z' },
-  { id: '28', module: 'accounting', action: 'delete', description: 'Delete accounting entries', created_at: '2024-01-01T00:00:00Z' }
-]
-
-// Mock role permissions mapping
-const mockRolePermissions: { [roleId: string]: string[] } = {
-  '1': mockPermissions.map(p => p.id), // Admin has all permissions
-  '2': ['1', '2', '3', '5', '6', '7', '9', '10', '11', '13', '14', '15', '17', '18', '19', '21', '22', '23'], // Manager
-  '3': ['2', '6', '9', '10', '11', '18', '21'], // Sales
-  '4': ['6', '10', '14', '17', '18', '19', '21'], // Warehouse
-  '5': ['2', '6', '10', '14', '21', '22', '25', '26', '27'] // Accountant
-}
 
 export default function RolesPage() {
   const [roles, setRoles] = React.useState<Role[]>([])
@@ -303,28 +208,17 @@ export default function RolesPage() {
         let permissionsData: Permission[] = []
         let rolePerms: { [roleId: string]: Permission[] } = {}
 
-        if (USE_SUPABASE) {
-          ;[rolesData, permissionsData] = await Promise.all([
-            getAllRoles(),
-            getAllPermissions(),
-          ])
+        ;[rolesData, permissionsData] = await Promise.all([
+          getAllRoles(),
+          getAllPermissions(),
+        ])
 
-          // Fetch permissions for all fetched roles efficiently
-          if (rolesData.length > 0) {
-            const roleIds = rolesData.map(role => role.id);
-            rolePerms = await getAllRolePermissionsMapForRoleIds(roleIds);
-          }
-          setRolePermissions(rolePerms)
-        } else {
-          rolesData = mockRoles
-          permissionsData = mockPermissions
-
-          const rolePerms: { [roleId: string]: Permission[] } = {}
-          Object.entries(mockRolePermissions).forEach(([roleId, permIds]) => {
-            rolePerms[roleId] = permissionsData.filter((p) => permIds.includes(p.id))
-          })
-          setRolePermissions(rolePerms)
+        // Fetch permissions for all fetched roles efficiently
+        if (rolesData.length > 0) {
+          const roleIds = rolesData.map(role => role.id);
+          rolePerms = await getAllRolePermissionsMapForRoleIds(roleIds);
         }
+        setRolePermissions(rolePerms)
 
         // Update cache
         dataCache.roles = rolesData
@@ -368,33 +262,12 @@ export default function RolesPage() {
     setIsAddingRole(true)
     
     try {
-      if (USE_SUPABASE) {
-        // TODO: Implement Supabase role creation
-        toast({
-          title: "Info",
-          description: "Supabase role creation not yet implemented.",
-          variant: "default"
-        })
-      } else {
-        // Mock implementation
-        const newRoleData: Role = {
-          id: Date.now().toString(),
-          name: newRole.name,
-          description: newRole.description,
-          status: newRole.status,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }
-        
-        setRoles(prev => [...prev, newRoleData])
-        setRolePermissions(prev => ({ ...prev, [newRoleData.id]: [] }))
-        
-        toast({
-          title: "Success",
-          description: "Role created successfully.",
-          variant: "default"
-        })
-      }
+      // TODO: Implement Supabase role creation
+      toast({
+        title: "Info",
+        description: "Role creation not yet implemented.",
+        variant: "default"
+      })
       
       setNewRole({ name: '', description: '', status: 'active' })
       setIsAddDialogOpen(false)
@@ -418,27 +291,12 @@ export default function RolesPage() {
     setIsEditingRole(true)
     
     try {
-      if (USE_SUPABASE) {
-        // TODO: Implement Supabase role update
-        toast({
-          title: "Info",
-          description: "Supabase role update not yet implemented.",
-          variant: "default"
-        })
-      } else {
-        // Mock implementation
-        setRoles(prev => prev.map(role => 
-          role.id === selectedRole.id 
-            ? { ...role, ...editRole, updated_at: new Date().toISOString() }
-            : role
-        ))
-        
-        toast({
-          title: "Success",
-          description: "Role updated successfully.",
-          variant: "default"
-        })
-      }
+      // TODO: Implement Supabase role update
+      toast({
+        title: "Info",
+        description: "Role update not yet implemented.",
+        variant: "default"
+      })
       
       setIsEditDialogOpen(false)
       setSelectedRole(null)
@@ -461,28 +319,12 @@ export default function RolesPage() {
     setIsDeletingRole(true)
     
     try {
-      if (USE_SUPABASE) {
-        // TODO: Implement Supabase role deletion
-        toast({
-          title: "Info",
-          description: "Supabase role deletion not yet implemented.",
-          variant: "default"
-        })
-      } else {
-        // Mock implementation
-        setRoles(prev => prev.filter(role => role.id !== selectedRole.id))
-        setRolePermissions(prev => {
-          const updated = { ...prev }
-          delete updated[selectedRole.id]
-          return updated
-        })
-        
-        toast({
-          title: "Success",
-          description: "Role deleted successfully.",
-          variant: "default"
-        })
-      }
+      // TODO: Implement Supabase role deletion
+      toast({
+        title: "Info",
+        description: "Role deletion not yet implemented.",
+        variant: "default"
+      })
       
       setIsDeleteDialogOpen(false)
       setSelectedRole(null)
@@ -514,27 +356,12 @@ export default function RolesPage() {
     setIsUpdatingPermissions(true)
     
     try {
-      if (USE_SUPABASE) {
-        // TODO: Implement Supabase permission update
-        toast({
-          title: "Info",
-          description: "Supabase permission update not yet implemented.",
-          variant: "default"
-        })
-      } else {
-        // Mock implementation
-        const updatedPermissions = permissions.filter(p => selectedPermissions.includes(p.id))
-        setRolePermissions(prev => ({
-          ...prev,
-          [selectedRole.id]: updatedPermissions
-        }))
-        
-        toast({
-          title: "Success",
-          description: "Role permissions updated successfully.",
-          variant: "default"
-        })
-      }
+      // TODO: Implement Supabase permission update
+      toast({
+        title: "Info",
+        description: "Permission update not yet implemented.",
+        variant: "default"
+      })
       
       setIsPermissionsDialogOpen(false)
       setSelectedRole(null)

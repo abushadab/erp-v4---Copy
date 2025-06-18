@@ -19,7 +19,8 @@ import {
   DialogDescription,
   DialogFooter,
   DialogHeader,
-  DialogTitle
+  DialogTitle,
+  DialogTrigger
 } from "@/components/ui/dialog"
 import {
   DropdownMenu,
@@ -41,12 +42,19 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { 
   Plus, 
   Search,
-  Trash2CheckX,
+  Trash2,
   Shield,
   Mail,
   Building,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  User,
+  UserCheck,
+  UserX,
+  Calendar,
+  Filter,
+  Eye,
+  Edit
 } from "lucide-react"
 import { type User as UserType } from "@/lib/mock-data/erp-data"
 import { getAllUsersWithRoles, createUserProfile, updateUserProfile, assignRoleToUser, removeRoleFromUser, getUserWithPermissions } from "@/lib/supabase/users"
@@ -55,9 +63,6 @@ import type { ExtendedUser } from "@/lib/types/supabase-types"
 import { useToast } from "@/hooks/use-toast"
 import { NotificationContainer } from "@/components/ui/notification"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-
-// Use environment variable to determine data source
-const USE_SUPABASE = process.env.NEXT_PUBLIC_USE_SUPABASE === 'true'
 
 // Global data cache and request deduplication to prevent multiple API calls
 const dataCache = {
@@ -116,15 +121,19 @@ export default function UsersPage() {
   // Set current user ID using onAuthStateChange listener
   React.useEffect(() => {
     const supabase = createClient();
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
         setCurrentUserId(session.user.id);
-        // Fetch user details to get the role
-        getUserWithPermissions(session.user.id).then((userData: ExtendedUser | null) => {
+        // Fetch user details to get the role (now with global caching)
+        try {
+          const userData = await getUserWithPermissions(session.user.id);
           if (userData) {
             setCurrentUserRole(userData.roles?.[0]?.name || null);
           }
-        });
+        } catch (error) {
+          console.error('Error fetching current user data:', error);
+          setCurrentUserRole(null);
+        }
       } else {
         setCurrentUserId(null);
         setCurrentUserRole(null);
@@ -168,35 +177,18 @@ export default function UsersPage() {
     setIsAddingUser(true);
     
     try {
-      if (USE_SUPABASE) {
-        // Create user in Supabase
-        // First create auth user (this would typically be done through Supabase Auth UI or API)
-        // For demo purposes, we'll just create the profile
-        await createUserProfile(
-          // In a real app, this would be the ID returned from createUser
-          `user_${Date.now()}`,
-          newUser.name,
-          newUser.department
-        );
+      // Create user in Supabase
+      // First create auth user (this would typically be done through Supabase Auth UI or API)
+      // For demo purposes, we'll just create the profile
+      await createUserProfile(
+        // In a real app, this would be the ID returned from createUser
+        `user_${Date.now()}`,
+        newUser.name,
+        newUser.department
+      );
 
-        // Refresh the user list using the cached function
-        await loadUsersData(true);
-      } else {
-        // Add to mock data
-        const newMockUser: UserType = {
-          id: `user_${Date.now()}`,
-          name: newUser.name,
-          email: newUser.email,
-          role: newUser.role as UserType['role'],
-          department: newUser.department || 'General',
-          status: (newUser.status as 'active' | 'inactive' | 'pending') || 'pending',
-          avatar: newUser.avatar || undefined,
-          joinDate: new Date().toISOString(),
-          permissions: []
-        };
-        
-        setUsers(prev => [...prev, newMockUser]);
-      }
+      // Refresh the user list using the cached function
+      await loadUsersData(true);
       
       // Reset form and close dialog
       setNewUser({
@@ -238,6 +230,7 @@ export default function UsersPage() {
         department: selectedUser.department,
         status: selectedUser.status,
         avatar: selectedUser.avatar || '',
+        joinDate: selectedUser.joinDate,
         permissions: selectedUser.permissions || [],
       })
     }
@@ -248,7 +241,9 @@ export default function UsersPage() {
     const { name, value } = e.target
     setEditUser(prev => ({
       ...prev,
-      [name]: value
+      [name]: name === 'role' ? value as UserType['role'] : 
+               name === 'status' ? value as UserType['status'] : 
+               value
     }))
   }
   
@@ -266,42 +261,24 @@ export default function UsersPage() {
     setIsEditingUser(true)
     
     try {
-      if (USE_SUPABASE) {
-        // Update user profile in Supabase
-        await updateUserProfile(editUser.id, {
-          name: editUser.name,
-          department: editUser.department,
-          status: editUser.status as UserType['status'],
-          avatar_url: editUser.avatar || null,
-        });
+      // Update user profile in Supabase
+      await updateUserProfile(editUser.id, {
+        name: editUser.name,
+        department: editUser.department,
+        status: editUser.status as UserType['status'],
+        avatar_url: editUser.avatar || null,
+      });
 
-        // Update user role if changed
-        if (selectedUser && selectedUser.role !== editUser.role) {
-          // Remove old role
-          await removeRoleFromUser(editUser.id, selectedUser.role);
-          // Assign new role
-          await assignRoleToUser(editUser.id, editUser.role);
-        }
-
-        // Refresh the user list using the cached function
-        await loadUsersData(true);
-      } else {
-        // Update in mock data
-        setUsers(users.map(user => {
-          if (user.id === editUser.id) {
-            return {
-              ...user,
-              name: editUser.name,
-              email: editUser.email,
-              role: editUser.role as UserType['role'],
-              department: editUser.department,
-              status: editUser.status as UserType['status'],
-              avatar: editUser.avatar || undefined,
-            }
-          }
-          return user
-        }))
+      // Update user role if changed
+      if (selectedUser && selectedUser.role !== editUser.role) {
+        // Remove old role
+        await removeRoleFromUser(editUser.id, selectedUser.role);
+        // Assign new role
+        await assignRoleToUser(editUser.id, editUser.role);
       }
+
+      // Refresh the user list using the cached function
+      await loadUsersData(true);
       
       // Close dialog
       setIsEditDialogOpen(false)
@@ -329,25 +306,20 @@ export default function UsersPage() {
     setIsDeletingUser(true)
     
     try {
-      if (USE_SUPABASE) {
-        // In a real app, you would use Supabase Auth to delete the user
-        // For now, we'll just delete the profile
-        // This is a placeholder implementation
-        
-        // First remove all roles from the user
-        // This would typically be handled by a database trigger or function
-        await removeRoleFromUser(selectedUser.id, selectedUser.role)
-        
-        // Then delete the user profile
-        // This would need to be implemented in the Supabase functions
-        // For now, we'll just refresh the user list
-        
-        // Refresh the user list using the cached function
-        await loadUsersData(true);
-      } else {
-        // Remove from mock data
-        setUsers(users.filter(user => user.id !== selectedUser.id))
-      }
+      // In a real app, you would use Supabase Auth to delete the user
+      // For now, we'll just delete the profile
+      // This is a placeholder implementation
+      
+      // First remove all roles from the user
+      // This would typically be handled by a database trigger or function
+      await removeRoleFromUser(selectedUser.id, selectedUser.role)
+      
+      // Then delete the user profile
+      // This would need to be implemented in the Supabase functions
+      // For now, we'll just refresh the user list
+      
+      // Refresh the user list using the cached function
+      await loadUsersData(true);
       
       // Close dialog
       setIsDeleteDialogOpen(false)
@@ -408,16 +380,9 @@ export default function UsersPage() {
         console.log('🔄 Fetching fresh users data from API')
         setLoading(true)
         
-        let usersData: UserType[] = []
-        
-        if (USE_SUPABASE) {
-          // Load from Supabase
-          const supabaseUsers = await getAllUsersWithRoles()
-          usersData = supabaseUsers.map(convertSupabaseUser)
-        } else {
-          // Use mock data
-          usersData = mockUsers
-        }
+        // Load from Supabase
+        const supabaseUsers = await getAllUsersWithRoles()
+        const usersData = supabaseUsers.map(convertSupabaseUser)
         
         console.log('✅ Users data fetched successfully')
         
@@ -693,8 +658,6 @@ export default function UsersPage() {
           <h1 className="text-3xl font-bold tracking-tight">User Management</h1>
           <p className="text-muted-foreground">
             Manage user accounts, roles, and permissions
-            {USE_SUPABASE && <span className="ml-2 text-green-600">(Live Data)</span>}
-            {!USE_SUPABASE && <span className="ml-2 text-blue-600">(Mock Data)</span>}
           </p>
         </div>
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>

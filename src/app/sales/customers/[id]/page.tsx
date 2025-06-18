@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Dialog,
   DialogContent,
@@ -28,20 +29,144 @@ import {
   Edit,
   Package
 } from "lucide-react"
-import { mockCustomers, mockSales, type Customer, type Sale } from "@/lib/mock-data/erp-data"
+import { type Customer } from "@/lib/supabase/types"
+import { getCustomerById } from "@/lib/supabase/sales-client"
 
 export default function CustomerDetailPage() {
   const params = useParams()
   const customerId = params.id as string
   const [isEditDialogOpen, setIsEditDialogOpen] = React.useState(false)
   
-  // Find customer data
-  const customer = mockCustomers.find(c => c.id === customerId)
+  const [customer, setCustomer] = React.useState<Customer | null>(null)
+  const [customerOrders, setCustomerOrders] = React.useState<any[]>([])
+  const [loading, setLoading] = React.useState(true)
   
-  // Find customer's orders
-  const customerOrders = mockSales.filter(sale => 
-    sale.customerName === customer?.name
-  )
+  React.useEffect(() => {
+    const loadCustomerData = async () => {
+      try {
+        if (customerId) {
+          const customerData = await getCustomerById(customerId)
+          setCustomer(customerData)
+          
+          // For now, set empty orders since we need to implement sales by customer
+          setCustomerOrders([])
+        }
+      } catch (error) {
+        console.error('Error loading customer data:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    
+    loadCustomerData()
+  }, [customerId])
+
+  if (loading) {
+    return (
+      <div className="flex-1 space-y-6 p-6">
+        {/* Header Skeleton */}
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center space-x-4">
+            <Skeleton className="h-9 w-20" />
+            <div>
+              <Skeleton className="h-8 w-48 mb-2" />
+              <Skeleton className="h-4 w-64" />
+            </div>
+          </div>
+          <Skeleton className="h-10 w-36" />
+        </div>
+
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {/* Customer Information Skeleton */}
+          <Card className="md:col-span-2">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Skeleton className="h-5 w-5" />
+                <Skeleton className="h-5 w-48" />
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-4">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i}>
+                      <Skeleton className="h-4 w-20 mb-2" />
+                      <div className="flex items-center space-x-2 mt-1">
+                        <Skeleton className="h-4 w-4" />
+                        <Skeleton className="h-5 w-40" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="space-y-4">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i}>
+                      <Skeleton className="h-4 w-20 mb-2" />
+                      <div className="flex items-center space-x-2 mt-1">
+                        <Skeleton className="h-4 w-4" />
+                        <Skeleton className="h-5 w-40" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Customer Stats Skeleton */}
+          <div className="space-y-4">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Card key={i}>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-4 w-4" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-8 w-24" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+
+        {/* Order History Skeleton */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Skeleton className="h-5 w-5" />
+              <Skeleton className="h-5 w-48" />
+            </CardTitle>
+            <Skeleton className="h-4 w-64" />
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="border rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-2">
+                      <div className="flex items-center space-x-4">
+                        <Skeleton className="h-5 w-32" />
+                        <Skeleton className="h-6 w-20" />
+                      </div>
+                      <div className="flex items-center space-x-6">
+                        <Skeleton className="h-4 w-24" />
+                        <Skeleton className="h-4 w-24" />
+                        <Skeleton className="h-4 w-32" />
+                      </div>
+                    </div>
+                    <div className="text-right space-y-1">
+                      <Skeleton className="h-6 w-24 ml-auto" />
+                      <Skeleton className="h-4 w-32 ml-auto" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   if (!customer) {
     return (
@@ -112,15 +237,15 @@ export default function CustomerDetailPage() {
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <label htmlFor="edit-email" className="text-right">Email</label>
-                <Input id="edit-email" type="email" defaultValue={customer.email} className="col-span-3" />
+                <Input id="edit-email" type="email" defaultValue={customer.email || ''} className="col-span-3" />
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <label htmlFor="edit-phone" className="text-right">Phone</label>
-                <Input id="edit-phone" defaultValue={customer.phone} className="col-span-3" />
+                <Input id="edit-phone" defaultValue={customer.phone || ''} className="col-span-3" />
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <label htmlFor="edit-address" className="text-right">Address</label>
-                <Input id="edit-address" defaultValue={customer.address} className="col-span-3" />
+                <Input id="edit-address" defaultValue={customer.address || ''} className="col-span-3" />
               </div>
             </div>
             <DialogFooter>
@@ -177,7 +302,7 @@ export default function CustomerDetailPage() {
                   <label className="text-sm font-medium text-muted-foreground">Added on</label>
                   <div className="flex items-center space-x-2 mt-1">
                     <Calendar className="h-4 w-4 text-muted-foreground" />
-                    <p>{customer.joinDate}</p>
+                    <p>{customer.join_date || customer.created_at || 'N/A'}</p>
                   </div>
                 </div>
 
@@ -201,7 +326,7 @@ export default function CustomerDetailPage() {
               <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">৳{customer.totalSpent.toFixed(2)}</div>
+              <div className="text-2xl font-bold">৳{(customer.total_spent || 0).toFixed(2)}</div>
             </CardContent>
           </Card>
 
@@ -211,7 +336,7 @@ export default function CustomerDetailPage() {
               <ShoppingBag className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{customer.totalOrders}</div>
+              <div className="text-2xl font-bold">{customer.total_orders || 0}</div>
             </CardContent>
           </Card>
 
@@ -222,7 +347,7 @@ export default function CustomerDetailPage() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                ৳{customer.totalOrders > 0 ? (customer.totalSpent / customer.totalOrders).toFixed(2) : '0.00'}
+                ৳{(customer.total_orders || 0) > 0 ? ((customer.total_spent || 0) / (customer.total_orders || 1)).toFixed(2) : '0.00'}
               </div>
             </CardContent>
           </Card>

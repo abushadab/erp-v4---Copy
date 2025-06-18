@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Skeleton } from "@/components/ui/skeleton"
 import { toast } from "sonner"
 import { 
   Plus, 
@@ -33,6 +34,58 @@ import {
 } from "lucide-react"
 import { getWarehouses, getProductsByWarehouse, type DatabaseWarehouse } from "@/lib/supabase/queries"
 import { createWarehouse, deleteWarehouse, activateWarehouse, type CreateWarehouseData } from "@/lib/supabase/mutations"
+
+// Global cache and request deduplication for warehouses
+let warehousesCache: {
+  data?: DatabaseWarehouse[]
+  lastFetch?: number
+  isLoading?: boolean
+  loadingPromise?: Promise<DatabaseWarehouse[]>
+} = {}
+
+const CACHE_DURATION = 30 * 1000 // 30 seconds
+
+// Request deduplication: ensure only one API call at a time
+const getWarehousesData = async () => {
+  const now = Date.now()
+  
+  // Return cached data if valid
+  if (warehousesCache.data && warehousesCache.lastFetch && (now - warehousesCache.lastFetch) < CACHE_DURATION) {
+    console.log('📋 Using cached warehouses data')
+    return warehousesCache.data
+  }
+  
+  // If already loading, return the existing promise
+  if (warehousesCache.isLoading && warehousesCache.loadingPromise) {
+    console.log('⏳ Warehouses data already loading, waiting for existing request...')
+    return warehousesCache.loadingPromise
+  }
+  
+  // Start fresh loading
+  warehousesCache.isLoading = true
+  warehousesCache.loadingPromise = getWarehouses().then((data) => {
+    // Cache the result
+    warehousesCache.data = data
+    warehousesCache.lastFetch = now
+    warehousesCache.isLoading = false
+    warehousesCache.loadingPromise = undefined
+    
+    console.log('✅ Warehouses data loaded and cached')
+    return data
+  }).catch((error: Error | unknown) => {
+    warehousesCache.isLoading = false
+    warehousesCache.loadingPromise = undefined
+    throw error
+  })
+  
+  return warehousesCache.loadingPromise
+}
+
+// Clear cache function
+const clearWarehousesCache = () => {
+  warehousesCache = {}
+  console.log('🗑️ Warehouses cache cleared')
+}
 
 export default function WarehousesPage() {
   const [warehouses, setWarehouses] = React.useState<DatabaseWarehouse[]>([])
@@ -56,21 +109,36 @@ export default function WarehousesPage() {
     capacity: ''
   })
 
-  // Load warehouses on component mount
+  // Add refs to prevent duplicate calls
+  const loadingRef = React.useRef(false)
+  const dataLoadedRef = React.useRef(false)
+
+  // Load warehouses on component mount with duplicate prevention
   React.useEffect(() => {
-    loadWarehouses()
+    if (!dataLoadedRef.current && !loadingRef.current) {
+      loadWarehouses()
+    }
   }, [])
 
   const loadWarehouses = async () => {
+    // Prevent duplicate calls
+    if (loadingRef.current) {
+      console.log('🔄 Warehouses data loading already in progress, skipping...')
+      return
+    }
+
     try {
+      loadingRef.current = true
       setLoading(true)
-      const data = await getWarehouses()
+      const data = await getWarehousesData()
       setWarehouses(data)
+      dataLoadedRef.current = true
     } catch (error) {
       console.error('Error loading warehouses:', error)
       toast.error('Failed to load warehouses')
     } finally {
       setLoading(false)
+      loadingRef.current = false
     }
   }
 
@@ -115,7 +183,9 @@ export default function WarehousesPage() {
         capacity: ''
       })
       
-      // Reload warehouses
+      // Clear cache and reload warehouses
+      clearWarehousesCache()
+      dataLoadedRef.current = false // Reset to allow fresh load
       await loadWarehouses()
     } catch (error) {
       console.error('Error creating warehouse:', error)
@@ -130,6 +200,8 @@ export default function WarehousesPage() {
       setIsDeleting(warehouseId)
       await deleteWarehouse(warehouseId)
       toast.success('Warehouse deleted successfully')
+      clearWarehousesCache()
+      dataLoadedRef.current = false // Reset to allow fresh load
       await loadWarehouses()
     } catch (error: any) {
       console.error('Error deleting warehouse:', error)
@@ -145,6 +217,8 @@ export default function WarehousesPage() {
       setIsActivating(warehouseId)
       await activateWarehouse(warehouseId)
       toast.success('Warehouse activated successfully')
+      clearWarehousesCache()
+      dataLoadedRef.current = false // Reset to allow fresh load
       await loadWarehouses()
     } catch (error: any) {
       console.error('Error activating warehouse:', error)
@@ -189,8 +263,55 @@ export default function WarehousesPage() {
   if (loading) {
     return (
       <div className="flex-1 space-y-6 p-6">
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin" />
+        {/* Header Skeleton */}
+        <div className="flex items-center justify-between">
+          <div>
+            <Skeleton className="h-8 w-48 mb-2" />
+            <Skeleton className="h-4 w-64" />
+          </div>
+          <Skeleton className="h-10 w-32" />
+        </div>
+
+        {/* Warehouse Grid Skeleton */}
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <Card key={index} className="relative">
+              <CardHeader>
+                <div className="flex items-start justify-between">
+                  <div className="space-y-1">
+                    <Skeleton className="h-6 w-32 mb-1" />
+                    <Skeleton className="h-4 w-24" />
+                  </div>
+                  <Skeleton className="h-5 w-16" />
+                </div>
+              </CardHeader>
+              
+              <CardContent className="space-y-4">
+                {/* Manager Info Skeleton */}
+                <div className="flex items-center space-x-2 text-sm">
+                  <Skeleton className="h-4 w-4" />
+                  <Skeleton className="h-4 w-24" />
+                </div>
+                
+                {/* Contact Skeleton */}
+                <div className="flex items-center space-x-2 text-sm">
+                  <Skeleton className="h-4 w-4" />
+                  <Skeleton className="h-4 w-32" />
+                </div>
+
+                {/* Address Skeleton */}
+                <div className="flex items-center space-x-2 text-sm">
+                  <Skeleton className="h-4 w-4" />
+                  <Skeleton className="h-4 w-40" />
+                </div>
+
+                {/* Action Buttons Skeleton */}
+                <div className="pt-2">
+                  <Skeleton className="h-9 w-full" />
+                </div>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       </div>
     )
