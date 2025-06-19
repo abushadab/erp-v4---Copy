@@ -30,10 +30,12 @@ const userPermissionsCache = new Map<string, {
   promise?: Promise<ExtendedUser | null>;
 }>();
 
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+const CACHE_DURATION = 2 * 60 * 1000; // Reduced to 2 minutes for production
+const PRODUCTION_TIMEOUT = 5000; // 5 seconds for production (faster timeout)
+const MAX_RETRIES = 2;
 
 /**
- * Get a specific user with their roles and permissions (with caching)
+ * Get a specific user with their roles and permissions (with caching and production optimizations)
  */
 export async function getUserWithPermissions(userId: string): Promise<ExtendedUser | null> {
   console.log('🔍 getUserWithPermissions called for userId:', userId);
@@ -51,9 +53,9 @@ export async function getUserWithPermissions(userId: string): Promise<ExtendedUs
   if (cached?.promise) {
     console.log('⏳ Request already in progress for user:', userId, '- waiting for existing promise...');
     try {
-      // Add timeout to prevent waiting forever for stuck promises
+      // Shorter timeout for production
       const timeoutPromise = new Promise<ExtendedUser | null>((_, reject) => 
-        setTimeout(() => reject(new Error('Promise timeout')), 8000)
+        setTimeout(() => reject(new Error('Promise timeout')), 4000)
       );
       return await Promise.race([cached.promise, timeoutPromise]);
     } catch (error) {
@@ -67,78 +69,108 @@ export async function getUserWithPermissions(userId: string): Promise<ExtendedUs
     }
   }
   
-  // Create new request promise with timeout protection
+  // Create new request promise with production-optimized timeout and retry logic
   const requestPromise = (async (): Promise<ExtendedUser | null> => {
-    const abortController = new AbortController();
-    const timeoutId = setTimeout(() => {
-      console.log('⏰ getUserWithPermissions timeout for userId:', userId);
-      abortController.abort();
-    }, 10000); // 10 second timeout
+    let lastError: any = null;
+    
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      const abortController = new AbortController();
+      const timeoutId = setTimeout(() => {
+        console.log(`⏰ getUserWithPermissions timeout for userId: ${userId} (attempt ${attempt}/${MAX_RETRIES})`);
+        abortController.abort();
+      }, PRODUCTION_TIMEOUT);
 
-    try {
-      console.log('🔄 Fetching fresh user permissions data from API for:', userId);
-      
-      const supabase = createClient();
-      const { data, error } = await supabase.rpc('get_user_with_permissions', {
-        user_id: userId
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (error) {
-        console.error('❌ API error fetching user:', error);
-        throw error;
-      }
-      
-      const result = data?.[0] || null;
-      console.log('📦 Fresh user data received:', { 
-        id: result?.id, 
-        name: result?.name, 
-        email: result?.email,
-        department: result?.department 
-      });
-      
-      // Update cache with result
-      userPermissionsCache.set(userId, {
-        data: result,
-        timestamp: now,
-        promise: undefined
-      });
-      
-      console.log('✅ User permissions data fetched and cached for:', userId);
-      return result;
-    } catch (error) {
-      clearTimeout(timeoutId);
-      
-      // Remove the promise from cache on error so next call can retry
-      const currentCached = userPermissionsCache.get(userId);
-      if (currentCached) {
+      try {
+        console.log(`🔄 Fetching fresh user permissions data from API for: ${userId} (attempt ${attempt}/${MAX_RETRIES})`);
+        
+        const supabase = createClient();
+        
+        // First validate session before making RPC call
+        const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+        if (sessionError || !sessionData.session) {
+          console.error('❌ Session validation failed:', sessionError);
+          throw new Error('Invalid session - please login again');
+        }
+        
+        // Try the RPC call with signal for timeout
+        const { data, error } = await supabase.rpc('get_user_with_permissions', {
+          user_id: userId
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (error) {
+          console.error(`❌ API error fetching user (attempt ${attempt}):`, error);
+          
+          // Check if it's a specific error that shouldn't be retried
+          if (error.code === 'PGRST116' || error.message?.includes('not found')) {
+            throw error; // Don't retry for these errors
+          }
+          
+          lastError = error;
+          if (attempt < MAX_RETRIES) {
+            console.log(`🔄 Retrying in 1 second... (attempt ${attempt + 1}/${MAX_RETRIES})`);
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            continue;
+          }
+          throw error;
+        }
+        
+        const result = data?.[0] || null;
+        console.log('📦 Fresh user data received:', { 
+          id: result?.id, 
+          name: result?.name, 
+          email: result?.email,
+          department: result?.department 
+        });
+        
+        // Update cache with result
         userPermissionsCache.set(userId, {
-          ...currentCached,
+          data: result,
+          timestamp: now,
           promise: undefined
         });
-      }
-      
-      console.error('❌ Error in getUserWithPermissions for user:', userId, error);
-      
-      // If it's an abort error (timeout), throw a more specific error
-      if (error instanceof Error && error.name === 'AbortError') {
-        throw new Error('Request timeout - please try again');
-      }
-      
-      throw error;
-    } finally {
-      clearTimeout(timeoutId);
-      
-      // Always ensure promise is cleared from cache
-      const currentCached = userPermissionsCache.get(userId);
-      if (currentCached?.promise) {
-        userPermissionsCache.set(userId, {
-          ...currentCached,
-          promise: undefined
-        });
+        
+        console.log(`✅ User permissions data fetched and cached for: ${userId} (attempt ${attempt})`);
+        return result;
+        
+      } catch (error) {
+        clearTimeout(timeoutId);
+        lastError = error;
+        
+        // If it's an abort error (timeout) and we have retries left, continue
+        if (error instanceof Error && error.name === 'AbortError' && attempt < MAX_RETRIES) {
+          console.log(`⏰ Request timeout, retrying... (attempt ${attempt + 1}/${MAX_RETRIES})`);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          continue;
+        }
+        
+        // For final attempt or non-retryable errors, break out of loop
+        break;
       }
     }
+    
+    // Remove the promise from cache on error so next call can retry
+    const currentCached = userPermissionsCache.get(userId);
+    if (currentCached) {
+      userPermissionsCache.set(userId, {
+        ...currentCached,
+        promise: undefined
+      });
+    }
+    
+    console.error('❌ All retry attempts failed for getUserWithPermissions:', userId, lastError);
+    
+    // Provide better error messages for production
+    if (lastError instanceof Error && lastError.name === 'AbortError') {
+      throw new Error('Connection timeout - please check your internet connection and try again');
+    }
+    
+    if (lastError?.message?.includes('JWT') || lastError?.message?.includes('session')) {
+      throw new Error('Session expired - please login again');
+    }
+    
+    throw new Error('Failed to load user data - please refresh the page and try again');
   })();
   
   // Store the promise in cache
