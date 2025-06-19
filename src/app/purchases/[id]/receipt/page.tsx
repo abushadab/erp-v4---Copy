@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { motion } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Package, CheckCircle, AlertTriangle, Save, X, RotateCcw, Box } from "lucide-react"
 import Link from "next/link"
@@ -10,9 +9,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { getPurchaseById, updatePurchaseReceipt, type PurchaseWithItems } from "@/lib/supabase/purchases"
+import { logPurchaseUpdate } from "@/lib/supabase/activity-logger"
 import { toast } from "sonner"
 
 interface UpdateReceiptPageProps {
@@ -46,48 +47,244 @@ export default function UpdateReceiptPage({ params }: UpdateReceiptPageProps) {
   const [receiptItems, setReceiptItems] = React.useState<ReceiptItem[]>([])
   const [hasUserMadeChanges, setHasUserMadeChanges] = React.useState(false)
 
-  React.useEffect(() => {
-    const fetchPurchase = async () => {
-      try {
-        setLoading(true)
-        const purchaseData = await getPurchaseById(resolvedParams.id)
-        setPurchase(purchaseData)
-        
-        if (purchaseData) {
-          const items: ReceiptItem[] = purchaseData.items.map(item => {
-            const currentNetReceived = item.received_quantity - item.returned_quantity
-            return {
-              itemId: item.item_id,
-              itemType: item.item_type,
-              itemName: item.item_name,
-              orderedQuantity: item.quantity,
-              previouslyReceived: item.received_quantity,
-              returnedQuantity: item.returned_quantity,
-              newReceivedQuantity: null, // empty by default
-              purchasePrice: Number(item.purchase_price),
-              total: Number(item.total),
-              variationId: item.variation_id || undefined
-            }
-          })
-          setReceiptItems(items)
-        }
-      } catch (error) {
-        console.error('Error fetching purchase:', error)
-        toast.error('Failed to load purchase details')
-      } finally {
-        setLoading(false)
-      }
-    }
+  // Enhanced deduplication protection against React Strict Mode
+  const initialLoadTriggered = React.useRef(false)
 
-    fetchPurchase()
+  const fetchPurchase = React.useCallback(async () => {
+    try {
+      console.log('🔄 Fetching purchase data for:', resolvedParams.id)
+      setLoading(true)
+      
+      // The getPurchaseById function now uses the global apiCache for deduplication
+      const purchaseData = await getPurchaseById(resolvedParams.id)
+      
+      console.log('✅ Purchase data fetched successfully')
+      setPurchase(purchaseData)
+      
+      if (purchaseData) {
+        const items: ReceiptItem[] = purchaseData.items.map(item => {
+          const currentNetReceived = item.received_quantity - item.returned_quantity
+          return {
+            itemId: item.item_id,
+            itemType: item.item_type,
+            itemName: item.item_name,
+            orderedQuantity: item.quantity,
+            previouslyReceived: item.received_quantity,
+            returnedQuantity: item.returned_quantity,
+            newReceivedQuantity: null, // empty by default
+            purchasePrice: Number(item.purchase_price),
+            total: Number(item.total),
+            variationId: item.variation_id || undefined
+          }
+        })
+        setReceiptItems(items)
+      }
+    } catch (error) {
+      console.error('❌ Error fetching purchase:', error)
+      toast.error('Failed to load purchase details')
+    } finally {
+      setLoading(false)
+    }
   }, [resolvedParams.id])
+
+  // Enhanced useEffect with deduplication protection
+  React.useEffect(() => {
+    console.log('🚀 Receipt page useEffect triggered')
+    
+    // Double protection against React Strict Mode
+    if (!initialLoadTriggered.current) {
+      console.log('🎯 First time loading - triggering purchase fetch')
+      initialLoadTriggered.current = true
+      fetchPurchase()
+    } else {
+      console.log('⚠️ useEffect called again but initial load already triggered')
+    }
+  }, []) // Empty dependency array to run only on mount
 
   if (loading) {
     return (
       <div className="container mx-auto px-6 py-8">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading purchase details...</p>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Main Content Skeleton */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Receipt Items Card Skeleton */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <Skeleton className="h-5 w-5" />
+                  <Skeleton className="h-6 w-40" />
+                </div>
+                <Skeleton className="h-4 w-80" />
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="border rounded-lg p-4">
+                      {/* First Row - Item Info and Status */}
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <Skeleton className="h-5 w-5" />
+                          <div className="flex-1 min-w-0">
+                            <Skeleton className="h-5 w-48 mb-1" />
+                            <div className="flex items-center gap-2">
+                              <Skeleton className="h-5 w-16" />
+                              <Skeleton className="h-5 w-20" />
+                            </div>
+                          </div>
+                        </div>
+                        <Skeleton className="h-6 w-20" />
+                      </div>
+
+                      {/* Progress Bar Skeleton */}
+                      <div className="mb-3">
+                        <div className="flex justify-between text-xs mb-1">
+                          <Skeleton className="h-3 w-24" />
+                          <Skeleton className="h-3 w-16" />
+                        </div>
+                        <Skeleton className="h-2 w-full rounded-full" />
+                      </div>
+
+                      {/* Second Row - Quantities and Prices */}
+                      <div className="flex items-center justify-between gap-4">
+                        {/* Prices Skeleton */}
+                        <div className="flex items-center gap-4">
+                          <div className="text-center">
+                            <Skeleton className="h-3 w-16 mb-1" />
+                            <Skeleton className="h-6 w-20" />
+                          </div>
+                          <div className="text-center">
+                            <Skeleton className="h-3 w-10 mb-1" />
+                            <Skeleton className="h-6 w-16" />
+                          </div>
+                        </div>
+
+                        {/* Quantities Skeleton */}
+                        <div className="flex items-center gap-4">
+                          <div className="text-center">
+                            <Skeleton className="h-3 w-12 mb-1" />
+                            <Skeleton className="h-6 w-8" />
+                          </div>
+                          <div className="text-center">
+                            <Skeleton className="h-3 w-20 mb-1" />
+                            <Skeleton className="h-9 w-20" />
+                          </div>
+                          <div className="text-center">
+                            <Skeleton className="h-3 w-16 mb-1" />
+                            <Skeleton className="h-6 w-8" />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  
+                  {/* Summary Card Skeleton */}
+                  <div className="border rounded-lg p-4 bg-gray-50">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-6">
+                        <Skeleton className="h-4 w-16" />
+                        <Skeleton className="h-4 w-24" />
+                        <Skeleton className="h-4 w-28" />
+                      </div>
+                      <div className="text-right">
+                        <Skeleton className="h-3 w-16 mb-1" />
+                        <Skeleton className="h-6 w-24" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Notes Card Skeleton */}
+            <Card>
+              <CardHeader>
+                <Skeleton className="h-6 w-32" />
+                <Skeleton className="h-4 w-64" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-20 w-full" />
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Sidebar Skeleton - Hidden on mobile, shown on lg+ screens */}
+          <div className="hidden lg:block space-y-6">
+            {/* Quick Actions Card Skeleton */}
+            <Card>
+              <CardHeader>
+                <Skeleton className="h-6 w-24" />
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </CardContent>
+            </Card>
+
+            {/* Overall Progress Card Skeleton */}
+            <Card>
+              <CardHeader>
+                <Skeleton className="h-6 w-28" />
+                <Skeleton className="h-4 w-40" />
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Progress Bar Skeleton */}
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-6 w-16" />
+                  </div>
+                  <Skeleton className="h-2.5 w-full rounded-full" />
+                  <Skeleton className="h-3 w-20 mx-auto" />
+                </div>
+                
+                {/* Receipt Details Grid Skeleton */}
+                <div className="border-t pt-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    {[1, 2, 3, 4].map((i) => (
+                      <div key={i} className="bg-gray-50 rounded-lg p-3">
+                        <Skeleton className="h-3 w-20 mb-1" />
+                        <Skeleton className="h-6 w-8 mb-1" />
+                        <Skeleton className="h-3 w-10" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Receipt Summary Card Skeleton */}
+            <Card>
+              <CardHeader>
+                <Skeleton className="h-6 w-32" />
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <div key={i} className="flex justify-between">
+                      <Skeleton className="h-4 w-20" />
+                      <Skeleton className="h-4 w-8" />
+                    </div>
+                  ))}
+                </div>
+                
+                <div className="border-t pt-4">
+                  <div className="flex justify-between">
+                    <Skeleton className="h-5 w-24" />
+                    <Skeleton className="h-5 w-20" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Submit Card Skeleton */}
+            <Card>
+              <CardContent className="pt-6">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-3 w-40 mx-auto mt-2" />
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
     )
@@ -346,6 +543,25 @@ export default function UpdateReceiptPage({ params }: UpdateReceiptPageProps) {
       console.log('Updating purchase receipt with timeline logging...')
       await updatePurchaseReceipt(purchase.id, itemUpdates)
 
+      // Log the purchase receipt update activity
+      await logPurchaseUpdate(
+        purchase.id,
+        purchase.supplier_name,
+        { 
+          action: 'receipt_update',
+          items_updated: changedItems.length 
+        },
+        { 
+          updated_items: changedItems.map(item => ({
+            item_name: item.itemName,
+            previous_received: item.previouslyReceived,
+            new_received: item.newReceivedQuantity
+          }))
+        }
+      ).catch(error => {
+        console.warn('Failed to log receipt update:', error)
+      })
+
       toast.success(`Successfully updated ${changedItems.length} item(s)!`)
       
       // Redirect back to purchase details
@@ -481,19 +697,9 @@ export default function UpdateReceiptPage({ params }: UpdateReceiptPageProps) {
   };
 
   return (
-    <motion.div
-      className="container mx-auto px-6 py-8"
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: "easeOut" }}
-    >
+    <div className="container mx-auto px-6 py-8">
       {/* Header */}
-      <motion.div 
-        className="flex items-center gap-4 mb-8"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.6, delay: 0.1 }}
-      >
+      <div className="flex items-center gap-4 mb-8">
         <Link href={`/purchases/${purchase.id}`}>
           <Button variant="outline" size="sm">
             <ArrowLeft className="mr-2 h-4 w-4" />
@@ -513,15 +719,10 @@ export default function UpdateReceiptPage({ params }: UpdateReceiptPageProps) {
             </Badge>
           </div>
         </div>
-      </motion.div>
+      </div>
 
       <form onSubmit={handleSubmit}>
-        <motion.div 
-          className="grid grid-cols-1 lg:grid-cols-3 gap-8"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.6, delay: 0.2 }}
-        >
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
             {/* Receipt Items */}
@@ -927,23 +1128,23 @@ export default function UpdateReceiptPage({ params }: UpdateReceiptPageProps) {
             {/* Submit */}
             <Card>
               <CardContent className="pt-6">
-                <Button 
-                  type="submit" 
-                  className="w-full bg-black border-black text-white hover:bg-gray-800"
-                  disabled={isLoading || !hasUserMadeChanges}
-                >
-                  {isLoading ? (
-                    <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      Updating...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="mr-2 h-4 w-4" />
-                      Update Receipt
-                    </>
-                  )}
-                </Button>
+                                  <Button 
+                    type="submit" 
+                    className="w-full bg-black border-black text-white hover:bg-gray-800"
+                    disabled={isLoading || !hasUserMadeChanges}
+                  >
+                    {isLoading ? (
+                      <>
+                        <div className="mr-2 h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin"></div>
+                        Updating...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="mr-2 h-4 w-4" />
+                        Update Receipt
+                      </>
+                    )}
+                  </Button>
                 
                 {!hasUserMadeChanges && (
                   <p className="text-xs text-muted-foreground mt-2 text-center">
@@ -953,8 +1154,8 @@ export default function UpdateReceiptPage({ params }: UpdateReceiptPageProps) {
               </CardContent>
             </Card>
           </div>
-        </motion.div>
+        </div>
       </form>
-    </motion.div>
+    </div>
   )
 } 

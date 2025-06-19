@@ -549,13 +549,18 @@ export default function UsersPage() {
   if (loading) {
     return (
       <div className="container mx-auto p-6">
-        {/* Header Skeleton */}
-        <div className="flex items-center justify-between mb-6">
+        {/* Header */}
+        <div className="flex justify-between items-center mb-6">
           <div>
-            <Skeleton className="h-8 w-48 mb-2" />
-            <Skeleton className="h-4 w-80" />
+            <h1 className="text-3xl font-bold tracking-tight">User Management</h1>
+            <p className="text-muted-foreground">
+              Manage user accounts, roles, and permissions
+            </p>
           </div>
-          <Skeleton className="h-10 w-32" />
+          <Button disabled>
+            <Plus className="mr-2 h-4 w-4" />
+            Add User
+          </Button>
         </div>
 
         {/* Summary Cards Skeleton */}

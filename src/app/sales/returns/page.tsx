@@ -157,13 +157,14 @@ function ReturnsPageContent() {
   if (loading) {
     return (
       <div className="container mx-auto px-6 py-8">
-        {/* Header Skeleton */}
+        {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div>
-            <Skeleton className="h-8 w-48 mb-2" />
-            <Skeleton className="h-4 w-80" />
+            <h1 className="text-3xl font-bold tracking-tight">Returns</h1>
+            <p className="text-muted-foreground">
+              Manage product returns and refund requests
+            </p>
           </div>
-          <Skeleton className="h-10 w-32" />
         </div>
 
         {/* Stats Cards Skeleton */}

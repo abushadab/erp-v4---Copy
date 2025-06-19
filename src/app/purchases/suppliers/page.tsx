@@ -1,13 +1,13 @@
 "use client"
 
 import * as React from "react"
-import { motion } from 'framer-motion'
 import { Search, Plus, Edit, Building, Mail, Phone, MapPin, Users, Calendar } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Table,
   TableBody,
@@ -241,7 +241,7 @@ export default function SuppliersPage() {
       email: supplier.email || '',
       phone: supplier.phone || '',
       address: supplier.address || '',
-      status: (supplier.status as 'active' | 'inactive') || 'active'
+      status: supplier.status
     })
     setErrors([])
     setIsEditModalOpen(true)
@@ -271,33 +271,45 @@ export default function SuppliersPage() {
 
   const stats = getSupplierStats()
 
+  // Skeleton loading screen
   if (isLoading) {
     return (
-      <div className="flex-1 space-y-6 p-6">
-        <div className="flex items-center space-x-4">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
-          <p>Loading suppliers...</p>
+      <div className="container mx-auto px-6 py-8">
+        {/* Filters Skeleton */}
+        <div className="mb-6 flex flex-col sm:flex-row gap-4">
+          <Skeleton className="h-10 w-full sm:w-80" />
+          <Skeleton className="h-10 w-full sm:w-40" />
+        </div>
+
+        {/* Table Skeleton */}
+        <div className="rounded-md border">
+          <div className="p-4">
+            <Skeleton className="h-4 w-48 mb-4" />
+          </div>
+          <div className="divide-y">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="p-4 space-y-2">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-3 w-3/4" />
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     )
   }
 
   return (
-    <motion.div
-      className="container mx-auto px-6 py-8"
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: "easeOut" }}
-    >
+    <div className="container mx-auto px-6 py-8">
       {/* Header */}
-      <motion.div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Suppliers</h1>
           <p className="text-muted-foreground mt-2">
             Manage your supplier database and relationships
           </p>
         </div>
-        <motion.div className="mt-4 sm:mt-0">
+        <div className="mt-4 sm:mt-0">
           <Dialog open={isAddModalOpen} onOpenChange={setIsAddModalOpen}>
             <DialogTrigger asChild>
               <Button className="w-full sm:w-auto cursor-pointer" onClick={resetAddForm}>
@@ -421,102 +433,40 @@ export default function SuppliersPage() {
               </form>
             </DialogContent>
           </Dialog>
-        </motion.div>
-      </motion.div>
-
-{/* Stats Cards - Hidden for now */}
-      {/* 
-      <motion.div 
-        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.6, delay: 0.1 }}
-      >
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Suppliers</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.total}</div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Active Suppliers</CardTitle>
-            <Building className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">{stats.active}</div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Inactive Suppliers</CardTitle>
-            <Building className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-gray-600">{stats.inactive}</div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Join Date Range</CardTitle>
-            <Calendar className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-sm font-medium">Latest: {getLatestJoinDate()}</div>
-          </CardContent>
-        </Card>
-      </motion.div>
-      */}
+        </div>
+      </div>
 
       {/* Filters */}
-      <motion.div 
-        className="flex flex-col sm:flex-row gap-4 mb-6"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.6, delay: 0.2 }}
-      >
+      <div className="mb-6 flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            placeholder="Search suppliers by name, email, or phone..."
+            placeholder="Search suppliers..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10"
           />
         </div>
         <Select value={statusFilter} onValueChange={(value: 'all' | 'active' | 'inactive') => setStatusFilter(value)}>
-          <SelectTrigger className="w-full sm:w-48">
-            <SelectValue placeholder="Filter by status" />
+          <SelectTrigger className="w-full sm:w-40">
+            <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Statuses</SelectItem>
+            <SelectItem value="all">All Status</SelectItem>
             <SelectItem value="active">Active</SelectItem>
             <SelectItem value="inactive">Inactive</SelectItem>
           </SelectContent>
         </Select>
-      </motion.div>
+      </div>
 
-      {/* Suppliers Table */}
-      <motion.div 
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.6, delay: 0.3 }}
-      >
-        <Card>
-          <CardHeader>
-            <CardTitle>Suppliers List</CardTitle>
-            <CardDescription>
+      {/* Count and Table */}
+      <div className="mb-4">
+        <p className="text-sm text-muted-foreground">
               {filteredSuppliers.length} of {suppliers.length} suppliers
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="rounded-md border">
+        </p>
+      </div>
+
+      <div className="rounded-md border bg-white">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -586,9 +536,6 @@ export default function SuppliersPage() {
                 </TableBody>
               </Table>
             </div>
-          </CardContent>
-        </Card>
-      </motion.div>
 
       {/* Edit Modal */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
@@ -708,6 +655,6 @@ export default function SuppliersPage() {
           </form>
         </DialogContent>
       </Dialog>
-    </motion.div>
+    </div>
   )
 } 

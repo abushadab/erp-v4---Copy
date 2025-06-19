@@ -5,6 +5,7 @@ import { CardContent, CardDescription, CardHeader, CardTitle } from "@/component
 
 import { AnimatedCard } from "@/components/animations/animated-card"
 import { AnimatedButton } from "@/components/animations/animated-button"
+import { Button } from "@/components/ui/button"
 import { StaggerContainer, StaggerItem } from "@/components/animations/stagger-container"
 import { PageWrapper } from "@/components/animations/page-wrapper"
 import { Badge } from "@/components/ui/badge"
@@ -197,33 +198,7 @@ export default function DashboardPage() {
   // Add ref to prevent duplicate calls
   const loadingRef = React.useRef(false)
   const dataLoadedRef = React.useRef(false)
-
-  // Load dashboard data with duplicate call prevention
-  const loadDashboardData = React.useCallback(async () => {
-    // Prevent duplicate calls
-    if (loadingRef.current) {
-      console.log('🔄 Dashboard data loading already in progress, skipping...')
-      return
-    }
-
-    try {
-      loadingRef.current = true
-      setLoading(true)
-      console.log('🔄 Loading dashboard data...')
-
-      // Use the new deduplicating function
-      const dashboardData = await getDashboardData()
-
-      setStats(dashboardData)
-      dataLoadedRef.current = true
-      console.log('✅ Dashboard data loaded successfully')
-    } catch (error) {
-      console.error('Dashboard data loading failed:', error)
-    } finally {
-      setLoading(false)
-      loadingRef.current = false
-    }
-  }, [])
+  const mountedRef = React.useRef(false)
 
   // Clear cache function
   const clearCache = () => {
@@ -236,16 +211,72 @@ export default function DashboardPage() {
     setRefreshing(true)
     clearCache() // Clear cache to force fresh data
     dataLoadedRef.current = false // Reset to allow fresh load
-    await loadDashboardData()
-    setRefreshing(false)
-  }, [loadDashboardData])
+    loadingRef.current = false // Reset loading flag
+    
+    try {
+      loadingRef.current = true
+      setLoading(true)
+      console.log('🔄 Refreshing dashboard data...')
 
-  // Load data on mount - with duplicate prevention
-  React.useEffect(() => {
-    if (!dataLoadedRef.current && !loadingRef.current) {
-      loadDashboardData()
+      const dashboardData = await getDashboardData()
+
+      if (mountedRef.current) {
+        setStats(dashboardData)
+        dataLoadedRef.current = true
+        console.log('✅ Dashboard data refreshed successfully')
+      }
+    } catch (error) {
+      console.error('Dashboard data refresh failed:', error)
+    } finally {
+      if (mountedRef.current) {
+        setLoading(false)
+      }
+      loadingRef.current = false
+      setRefreshing(false)
     }
-  }, [loadDashboardData])
+  }, [])
+
+  // Load data on mount - with duplicate prevention and proper cleanup
+  React.useEffect(() => {
+    mountedRef.current = true
+    
+    const loadData = async () => {
+      // Prevent duplicate calls
+      if (loadingRef.current || dataLoadedRef.current) {
+        console.log('🔄 Dashboard data loading already in progress or completed, skipping...')
+        return
+      }
+
+      try {
+        loadingRef.current = true
+        setLoading(true)
+        console.log('🔄 Loading dashboard data...')
+
+        // Use the new deduplicating function
+        const dashboardData = await getDashboardData()
+
+        // Only update state if component is still mounted
+        if (mountedRef.current) {
+          setStats(dashboardData)
+          dataLoadedRef.current = true
+          console.log('✅ Dashboard data loaded successfully')
+        }
+      } catch (error) {
+        console.error('Dashboard data loading failed:', error)
+      } finally {
+        if (mountedRef.current) {
+          setLoading(false)
+        }
+        loadingRef.current = false
+      }
+    }
+    
+    loadData()
+
+    return () => {
+      mountedRef.current = false
+    }
+  }, []) // Empty dependency array
 
   // Calculate metrics based on time period
   const getMetricsForPeriod = () => {
@@ -269,15 +300,23 @@ export default function DashboardPage() {
   const LoadingSkeleton = () => (
     <PageWrapper>
       <div className="flex-1 space-y-6 p-6">
-        {/* Header Skeleton */}
+        {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <Skeleton className="h-8 w-48 mb-2" />
-            <Skeleton className="h-4 w-96" />
+            <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+            <p className="text-muted-foreground">
+              Your business overview
+            </p>
           </div>
           <div className="flex items-center space-x-2">
-            <Skeleton className="h-10 w-32" />
-            <Skeleton className="h-10 w-32" />
+            <Button variant="outline" disabled className="w-32">
+              <CalendarDays className="mr-2 h-4 w-4" />
+              Loading...
+            </Button>
+            <Button variant="outline" disabled>
+              <Plus className="mr-2 h-4 w-4" />
+              Refresh
+            </Button>
           </div>
         </div>
 

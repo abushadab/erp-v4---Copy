@@ -241,26 +241,94 @@ export async function initializeChartOfAccounts(): Promise<void> {
   }
 }
 
+// Promise-based cache for account setup check to prevent duplicate concurrent requests
+let accountSetupCache: { 
+  result: boolean | null; 
+  timestamp: number; 
+  promise: Promise<boolean> | null 
+} = {
+  result: null,
+  timestamp: 0,
+  promise: null
+}
+
 /**
  * Check if chart of accounts exists
+ * Optimized to use a single RPC call to reduce API requests and prevent concurrent duplicate calls
  */
 export async function checkChartOfAccountsExists(): Promise<boolean> {
+  const now = Date.now()
+  
+  // Return cached result if recent (within 30 seconds)
+  if (accountSetupCache.result !== null && (now - accountSetupCache.timestamp) < 30000) {
+    console.log('📦 Using cached account setup result:', accountSetupCache.result)
+    return accountSetupCache.result
+  }
+  
+  // If there's already a request in progress, wait for it
+  if (accountSetupCache.promise) {
+    console.log('⏳ Account setup check already in progress, waiting...')
+    return await accountSetupCache.promise
+  }
   const supabase = createClient()
   
-  try {
-    const { data: categories } = await supabase
-      .from('account_categories')
-      .select('id')
-      .limit(1)
-    
-    const { data: accounts } = await supabase
-      .from('accounts')
-      .select('id')
-      .limit(1)
-    
-    return (categories?.length || 0) > 0 && (accounts?.length || 0) > 0
-  } catch (error) {
-    console.error('Error checking chart of accounts:', error)
-    return false
-  }
+  // Create the promise and store it in cache to prevent duplicate requests
+  const checkPromise = (async (): Promise<boolean> => {
+    try {
+      console.log('🔍 Checking account setup with optimized query...')
+      
+      // Try using the RPC function first
+      const { data: rpcResult, error: rpcError } = await supabase
+        .rpc('check_accounts_setup')
+      
+      if (!rpcError && rpcResult !== null) {
+        console.log('✅ RPC account setup check successful:', rpcResult)
+        
+        accountSetupCache = {
+          result: rpcResult,
+          timestamp: now,
+          promise: null
+        }
+        
+        return rpcResult
+      }
+      
+      console.log('⚠️ RPC not available, falling back to parallel queries:', rpcError)
+      
+      // Fallback to parallel queries if RPC is not available
+      const [categoriesResult, accountsResult] = await Promise.all([
+        supabase.from('account_categories').select('id').limit(1),
+        supabase.from('accounts').select('id').limit(1)
+      ])
+      
+      const hasData = (categoriesResult.data && categoriesResult.data.length > 0) && 
+                     (accountsResult.data && accountsResult.data.length > 0)
+      
+      accountSetupCache = {
+        result: hasData,
+        timestamp: now,
+        promise: null
+      }
+      
+      return hasData
+      
+    } catch (error) {
+      console.error('❌ Error checking account setup:', error)
+      
+      // Cache negative result for shorter time (10 seconds) to allow quick retry
+      accountSetupCache = {
+        result: false,
+        timestamp: now - 20000, // Make it expire quickly for retry
+        promise: null
+      }
+      
+      return false
+    }
+  })()
+  
+  // Store the promise in cache
+  accountSetupCache.promise = checkPromise
+  
+  // Return the promise result
+  return await checkPromise
 } 

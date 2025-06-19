@@ -263,13 +263,18 @@ export default function WarehousesPage() {
   if (loading) {
     return (
       <div className="flex-1 space-y-6 p-6">
-        {/* Header Skeleton */}
+        {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <Skeleton className="h-8 w-48 mb-2" />
-            <Skeleton className="h-4 w-64" />
+            <h1 className="text-3xl font-bold tracking-tight">Warehouses</h1>
+            <p className="text-muted-foreground">
+              Manage your warehouse locations and inventory distribution
+            </p>
           </div>
-          <Skeleton className="h-10 w-32" />
+          <Button disabled>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Warehouse
+          </Button>
         </div>
 
         {/* Warehouse Grid Skeleton */}

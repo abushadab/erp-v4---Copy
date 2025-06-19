@@ -26,7 +26,7 @@ class APICache {
     console.log('🔍 Cache miss - fetching:', key)
     
     // Create and store the pending request
-    const request = fetcher()
+    const request = this.executeWithRetry(fetcher)
     this.pendingRequests.set(key, request)
 
     try {
@@ -37,6 +37,46 @@ class APICache {
     } finally {
       // Remove from pending requests
       this.pendingRequests.delete(key)
+    }
+  }
+
+  private async executeWithRetry<T>(fetcher: () => Promise<T>, retryCount = 0): Promise<T> {
+    try {
+      return await fetcher()
+    } catch (error: any) {
+      // Check if it's an authentication error
+      const isAuthError = error?.message?.includes('JWT') || 
+                         error?.message?.includes('session') ||
+                         error?.code === 'PGRST301' || // Supabase auth error
+                         error?.code === 'invalid_grant'
+
+      // Retry once for auth errors
+      if (isAuthError && retryCount === 0) {
+        console.log('🔐 Authentication error detected, clearing cache and retrying:', error.message)
+        
+        // Clear all cache on auth error
+        this.clear()
+        
+        // Try to refresh session
+        try {
+          const { createClient } = await import('@/lib/supabase/client')
+          const supabase = createClient()
+          await supabase.auth.getSession()
+          console.log('✅ Session refreshed, retrying request')
+        } catch (sessionError) {
+          console.error('❌ Failed to refresh session:', sessionError)
+          // If session refresh fails, redirect to login
+          if (typeof window !== 'undefined') {
+            window.location.href = '/login'
+          }
+          throw error
+        }
+
+        // Retry the request
+        return this.executeWithRetry(fetcher, retryCount + 1)
+      }
+
+      throw error
     }
   }
 

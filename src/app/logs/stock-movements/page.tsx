@@ -84,10 +84,10 @@ export default function StockMovementsPage() {
         animate={{ opacity: 1 }}
         transition={{ duration: 0.6, delay: 0.1 }}
       >
-        <Link href="/products">
+        <Link href="/logs/activity">
           <Button variant="outline" size="sm">
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Products
+            Back to Logs
           </Button>
         </Link>
         <div className="flex-1">

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from 'react'
+import React, { useState } from 'react'
 import Link from 'next/link'
 import { User, Settings as SettingsIcon, LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -20,6 +20,17 @@ import { toast } from 'sonner'
 export function UserProfile() {
   const { user, loading, error } = useCurrentUser()
   const [isSigningOut, setIsSigningOut] = useState(false)
+  
+  // Debug logging for user data changes
+  React.useEffect(() => {
+    console.log('👤 UserProfile component - user data changed:', {
+      name: user?.name,
+      email: user?.email,
+      department: user?.department,
+      loading,
+      error
+    })
+  }, [user, loading, error])
 
   const handleSignOut = async () => {
     setIsSigningOut(true)
@@ -60,11 +71,11 @@ export function UserProfile() {
   // Loading state
   if (loading) {
     return (
-      <div className="flex items-center space-x-3">
-        <Skeleton className="h-8 w-8 rounded-full" />
+      <div className="flex items-center space-x-3 h-11" style={{ width: '170px' }}>
+        <div className="h-8 w-8 rounded-full animate-pulse" style={{ backgroundColor: '#e2e8f0' }}></div>
         <div className="space-y-1">
-          <Skeleton className="h-4 w-24" />
-          <Skeleton className="h-3 w-16" />
+          <div className="h-4 w-24 rounded animate-pulse" style={{ backgroundColor: '#e2e8f0' }}></div>
+          <div className="h-3 w-16 rounded animate-pulse" style={{ backgroundColor: '#e2e8f0' }}></div>
         </div>
       </div>
     )
@@ -90,7 +101,11 @@ export function UserProfile() {
     <div>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" className="justify-start transition-colors px-2 py-2 h-11" onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#d4dfe1'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+          <div 
+            className="flex items-center justify-start cursor-pointer h-11 rounded-md transition-colors focus:outline-none"
+            role="button"
+            tabIndex={0}
+          >
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground mr-3">
               {user.avatar_url ? (
                 <img 
@@ -110,7 +125,7 @@ export function UserProfile() {
                 {getPrimaryRole()}
               </div>
             </div>
-          </Button>
+          </div>
         </DropdownMenuTrigger>
         <DropdownMenuContent className="w-56" align="end" forceMount>
           <DropdownMenuLabel className="font-normal">

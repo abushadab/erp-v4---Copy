@@ -47,27 +47,56 @@ export async function getUserWithPermissions(userId: string): Promise<ExtendedUs
     return cached.data;
   }
   
-  // If there's already a request in progress, wait for it
+  // If there's already a request in progress, wait for it with timeout protection
   if (cached?.promise) {
     console.log('⏳ Request already in progress for user:', userId, '- waiting for existing promise...');
-    return await cached.promise;
+    try {
+      // Add timeout to prevent waiting forever for stuck promises
+      const timeoutPromise = new Promise<ExtendedUser | null>((_, reject) => 
+        setTimeout(() => reject(new Error('Promise timeout')), 8000)
+      );
+      return await Promise.race([cached.promise, timeoutPromise]);
+    } catch (error) {
+      console.warn('⚠️ Cached promise timed out or failed, creating new request for user:', userId);
+      // Clear the stuck promise and continue with new request
+      userPermissionsCache.set(userId, {
+        data: cached.data,
+        timestamp: cached.timestamp,
+        promise: undefined
+      });
+    }
   }
   
-  // Create new request promise
+  // Create new request promise with timeout protection
   const requestPromise = (async (): Promise<ExtendedUser | null> => {
+    const abortController = new AbortController();
+    const timeoutId = setTimeout(() => {
+      console.log('⏰ getUserWithPermissions timeout for userId:', userId);
+      abortController.abort();
+    }, 10000); // 10 second timeout
+
     try {
       console.log('🔄 Fetching fresh user permissions data from API for:', userId);
       
-      const { data, error } = await createClient().rpc('get_user_with_permissions', {
+      const supabase = createClient();
+      const { data, error } = await supabase.rpc('get_user_with_permissions', {
         user_id: userId
       });
       
+      clearTimeout(timeoutId);
+      
       if (error) {
-        console.error('Error fetching user:', error);
+        console.error('❌ API error fetching user:', error);
         throw error;
       }
       
       const result = data?.[0] || null;
+      console.log('📦 Fresh user data received:', { 
+        id: result?.id, 
+        name: result?.name, 
+        email: result?.email,
+        department: result?.department 
+      });
       
       // Update cache with result
       userPermissionsCache.set(userId, {
@@ -79,6 +108,8 @@ export async function getUserWithPermissions(userId: string): Promise<ExtendedUs
       console.log('✅ User permissions data fetched and cached for:', userId);
       return result;
     } catch (error) {
+      clearTimeout(timeoutId);
+      
       // Remove the promise from cache on error so next call can retry
       const currentCached = userPermissionsCache.get(userId);
       if (currentCached) {
@@ -89,7 +120,24 @@ export async function getUserWithPermissions(userId: string): Promise<ExtendedUs
       }
       
       console.error('❌ Error in getUserWithPermissions for user:', userId, error);
+      
+      // If it's an abort error (timeout), throw a more specific error
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error('Request timeout - please try again');
+      }
+      
       throw error;
+    } finally {
+      clearTimeout(timeoutId);
+      
+      // Always ensure promise is cleared from cache
+      const currentCached = userPermissionsCache.get(userId);
+      if (currentCached?.promise) {
+        userPermissionsCache.set(userId, {
+          ...currentCached,
+          promise: undefined
+        });
+      }
     }
   })();
   
@@ -108,11 +156,15 @@ export async function getUserWithPermissions(userId: string): Promise<ExtendedUs
  */
 export function clearUserPermissionsCache(userId?: string): void {
   if (userId) {
-    console.log('🗑️ Clearing user permissions cache for:', userId);
+    const hadCachedData = userPermissionsCache.has(userId);
+    console.log('🗑️ Clearing user permissions cache for:', userId, '- had cached data:', hadCachedData);
     userPermissionsCache.delete(userId);
+    console.log('✅ Cache cleared for user:', userId, '- cache size now:', userPermissionsCache.size);
   } else {
-    console.log('🗑️ Clearing all user permissions cache');
+    const cacheSize = userPermissionsCache.size;
+    console.log('🗑️ Clearing all user permissions cache - current size:', cacheSize);
     userPermissionsCache.clear();
+    console.log('✅ All cache cleared - cache size now:', userPermissionsCache.size);
   }
 }
 
@@ -123,18 +175,28 @@ export async function updateUserProfile(
   userId: string, 
   updates: Partial<Database['public']['Tables']['user_profiles']['Update']>
 ): Promise<void> {
+  console.log('📝 updateUserProfile called with:', { userId, updates })
+  
   try {
+    console.log('🔗 Creating Supabase client and executing update...')
     const { error } = await createClient()
       .from('user_profiles')
       .update(updates)
       .eq('id', userId)
     
     if (error) {
-      console.error('Error updating user profile:', error)
+      console.error('❌ Database error updating user profile:', error)
       throw error
     }
+    
+    console.log('✅ Database update successful')
+    
+    // Clear the user permissions cache to force fresh data on next fetch
+    console.log('🗑️ Clearing user cache after profile update for:', userId)
+    clearUserPermissionsCache(userId)
+    console.log('✅ User cache cleared successfully')
   } catch (error) {
-    console.error('Error in updateUserProfile:', error)
+    console.error('❌ Error in updateUserProfile:', error)
     throw error
   }
 }
@@ -272,7 +334,7 @@ export async function getRolePermissions(roleId: string): Promise<Permission[]> 
       throw error
     }
     
-    return data?.map(item => item.permissions).filter(Boolean) as Permission[] || []
+    return data?.map((item: any) => item.permissions).filter(Boolean) as Permission[] || []
   } catch (error) {
     console.error('Error in getRolePermissions:', error)
     throw error
@@ -309,7 +371,7 @@ export async function getAllRolePermissionsMapForRoleIds(roleIds: string[]): Pro
     }
 
     const rolePermsMap: { [roleId: string]: Permission[] } = {};
-    data?.forEach(item => {
+    data?.forEach((item: any) => {
       if (!item.role_id || !item.permissions) return; // Skip if role_id or the joined permission is null
 
       if (!rolePermsMap[item.role_id]) {

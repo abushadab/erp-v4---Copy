@@ -2,8 +2,12 @@ import { createClient } from './client'
 import { updateWarehouseStock as updateWarehouseStockFunction } from '../utils/multi-warehouse-stock'
 import { updatePackagingWarehouseStock as updatePackagingWarehouseStockFunction } from '../utils/multi-warehouse-packaging-stock'
 import { createPurchaseJournalEntry, createPurchaseReturnJournalEntry, createPurchaseReceiptJournalEntry, createPaymentJournalEntry, createPaymentReversalJournalEntry } from './accounts-client'
+import { apiCache } from './cache'
 
 // 🔄 REQUEST DEDUPLICATION SYSTEM (prevents duplicate API calls in React 18 Strict Mode)
+// This system is deprecated in favor of the global apiCache system
+// Keeping for backward compatibility but new functions should use apiCache
+
 const purchaseDataCache = new Map<string, {
   currentRequest?: Promise<any>
   lastFetch?: number
@@ -11,33 +15,8 @@ const purchaseDataCache = new Map<string, {
 }>()
 
 function withPurchaseDeduplication<T>(key: string, fn: () => Promise<T>): Promise<T> {
-  const cached = purchaseDataCache.get(key)
-  const now = Date.now()
-  
-  // If there's an active request, return it
-  if (cached?.currentRequest) {
-    console.log(`🔄 Deduplicating purchase request: ${key}`)
-    return cached.currentRequest
-  }
-  
-  // Create new request
-  const request = fn().finally(() => {
-    // Clear the active request when done
-    const entry = purchaseDataCache.get(key)
-    if (entry) {
-      entry.currentRequest = undefined
-      entry.lastFetch = now
-    }
-  })
-  
-  // Store the active request
-  if (!cached) {
-    purchaseDataCache.set(key, { currentRequest: request })
-  } else {
-    cached.currentRequest = request
-  }
-  
-  return request
+  // Use global apiCache instead of local cache for better consistency
+  return apiCache.get(key, fn)
 }
 
 // Database types for purchases
@@ -184,20 +163,22 @@ export async function getPurchaseById(id: string): Promise<PurchaseWithItems | n
 }
 
 export async function getSuppliers(): Promise<DatabaseSupplier[]> {
-  const supabase = createClient()
-  
-  const { data, error } = await supabase
-    .from('suppliers')
-    .select('*')
-    .eq('status', 'active')
-    .order('name')
+  return apiCache.get('suppliers-active', async () => {
+    const supabase = createClient()
+    
+    const { data, error } = await supabase
+      .from('suppliers')
+      .select('*')
+      .eq('status', 'active')
+      .order('name')
 
-  if (error) {
-    console.error('Error fetching suppliers:', error)
-    throw new Error('Failed to fetch suppliers')
-  }
+    if (error) {
+      console.error('Error fetching suppliers:', error)
+      throw new Error('Failed to fetch suppliers')
+    }
 
-  return data || []
+    return data || []
+  })
 }
 
 // Use cached version from queries to prevent duplicate API calls

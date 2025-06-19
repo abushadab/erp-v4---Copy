@@ -1,12 +1,12 @@
 "use client"
 
 import * as React from "react"
-import { motion } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Package, Truck, Calendar, User, MapPin, FileText, CheckCircle, Clock, Box } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Table,
   TableBody,
@@ -68,9 +68,179 @@ export default function PurchaseDetailsPage({ params }: PurchaseDetailsPageProps
   if (loading) {
     return (
       <div className="container mx-auto px-6 py-8">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading purchase details...</p>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Main Content Skeleton */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Purchase Items Card Skeleton */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <Skeleton className="h-5 w-5" />
+                  <Skeleton className="h-6 w-24" />
+                </div>
+                <Skeleton className="h-4 w-80" />
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="border rounded-lg p-4">
+                      <div className="flex items-center gap-4">
+                        {/* Item Info Skeleton */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-3">
+                            <Skeleton className="h-5 w-5" />
+                            <div className="flex-1 min-w-0">
+                              <Skeleton className="h-5 w-48 mb-1" />
+                              <div className="flex items-center gap-2">
+                                <Skeleton className="h-5 w-16" />
+                                <Skeleton className="h-5 w-20" />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Quantities Skeleton */}
+                        <div className="flex items-center gap-6">
+                          <div className="text-center">
+                            <Skeleton className="h-3 w-12 mb-1" />
+                            <Skeleton className="h-6 w-8" />
+                          </div>
+                          <div className="text-center">
+                            <Skeleton className="h-3 w-14 mb-1" />
+                            <Skeleton className="h-6 w-8" />
+                          </div>
+                        </div>
+
+                        {/* Price & Total Skeleton */}
+                        <div className="flex items-center gap-6">
+                          <div className="text-right">
+                            <Skeleton className="h-3 w-16 mb-1" />
+                            <Skeleton className="h-6 w-20" />
+                          </div>
+                          <div className="text-right">
+                            <Skeleton className="h-3 w-10 mb-1" />
+                            <Skeleton className="h-6 w-16" />
+                          </div>
+                        </div>
+
+                        {/* Status Skeleton */}
+                        <Skeleton className="h-6 w-16" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Timeline Skeleton */}
+            <Card>
+              <CardHeader>
+                <Skeleton className="h-6 w-32" />
+                <Skeleton className="h-4 w-64" />
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="flex items-start gap-4">
+                      <Skeleton className="h-8 w-8 rounded-full" />
+                      <div className="flex-1 space-y-2">
+                        <Skeleton className="h-4 w-32" />
+                        <Skeleton className="h-3 w-64" />
+                        <Skeleton className="h-3 w-24" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Payment History Skeleton */}
+            <Card>
+              <CardHeader>
+                <Skeleton className="h-6 w-40" />
+                <Skeleton className="h-4 w-72" />
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {[1, 2].map((i) => (
+                    <div key={i} className="border rounded-lg p-4">
+                      <div className="flex justify-between items-start mb-2">
+                        <Skeleton className="h-5 w-32" />
+                        <Skeleton className="h-5 w-20" />
+                      </div>
+                      <div className="space-y-1">
+                        <Skeleton className="h-3 w-48" />
+                        <Skeleton className="h-3 w-36" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Sidebar Skeleton - Hidden on mobile, shown on lg+ screens */}
+          <div className="hidden lg:block space-y-6">
+            {/* Actions Card Skeleton */}
+            <Card>
+              <CardHeader>
+                <Skeleton className="h-6 w-16" />
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </CardContent>
+            </Card>
+
+            {/* Order Summary Card Skeleton */}
+            <Card>
+              <CardHeader>
+                <Skeleton className="h-6 w-28" />
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <div key={i} className="flex justify-between">
+                      <Skeleton className="h-4 w-20" />
+                      <Skeleton className="h-4 w-8" />
+                    </div>
+                  ))}
+                </div>
+                
+                <div className="border-t pt-4 space-y-2">
+                  <div className="flex justify-between">
+                    <Skeleton className="h-5 w-28" />
+                    <Skeleton className="h-5 w-24" />
+                  </div>
+                  <Skeleton className="h-2 w-full rounded-full" />
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Purchase Details Card Skeleton */}
+            <Card>
+              <CardHeader>
+                <Skeleton className="h-6 w-32" />
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Skeleton className="h-4 w-4" />
+                    <Skeleton className="h-4 w-16" />
+                  </div>
+                  <Skeleton className="h-5 w-40" />
+                </div>
+                
+                <div className="border-t pt-4 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Skeleton className="h-4 w-4" />
+                    <Skeleton className="h-4 w-28" />
+                  </div>
+                  <Skeleton className="h-5 w-36" />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
     )
@@ -203,19 +373,9 @@ export default function PurchaseDetailsPage({ params }: PurchaseDetailsPageProps
   const canProcessReturn = isWithinReturnWindow(purchase.purchase_date, purchase.status)
 
   return (
-    <motion.div
-      className="container mx-auto px-6 py-8"
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: "easeOut" }}
-    >
+    <div className="container mx-auto px-6 py-8">
       {/* Header */}
-      <motion.div 
-        className="flex items-center gap-4 mb-8"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.6, delay: 0.1 }}
-      >
+      <div className="flex items-center gap-4 mb-8">
         <Link href="/purchases">
           <Button variant="outline" size="sm">
             <ArrowLeft className="mr-2 h-4 w-4" />
@@ -235,14 +395,9 @@ export default function PurchaseDetailsPage({ params }: PurchaseDetailsPageProps
             </Badge>
           </div>
         </div>
-      </motion.div>
+      </div>
 
-      <motion.div 
-        className="grid grid-cols-1 lg:grid-cols-3 gap-8"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.6, delay: 0.2 }}
-      >
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Main Content */}
         <div className="lg:col-span-2 space-y-6">
           {/* Purchase Items */}
@@ -873,7 +1028,7 @@ export default function PurchaseDetailsPage({ params }: PurchaseDetailsPageProps
             </CardContent>
           </Card>
         </div>
-      </motion.div>
-    </motion.div>
+      </div>
+    </div>
   )
 } 

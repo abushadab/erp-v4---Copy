@@ -38,7 +38,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { toast } from "sonner"
-import { getPackagingAttributes } from "@/lib/supabase/queries"
+import { getPackagingAttributes, invalidatePackagingAttributesCache } from "@/lib/supabase/queries"
 import type { DatabasePackagingAttribute } from "@/lib/supabase/queries"
 import { 
   createPackaging, 
@@ -155,6 +155,8 @@ export default function AddPackagingPage() {
   const loadPackagingAttributes = async () => {
     try {
       setLoadingAttributes(true)
+      // Clear cache first to ensure fresh data
+      invalidatePackagingAttributesCache()
       const data = await getPackagingAttributes()
       setPackagingAttributes(data)
     } catch (error) {

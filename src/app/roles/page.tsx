@@ -444,13 +444,18 @@ export default function RolesPage() {
   if (loading) {
     return (
       <div className="container mx-auto p-6 space-y-6">
-        {/* Header Skeleton */}
-        <div className="flex items-center justify-between">
+        {/* Header */}
+        <div className="flex justify-between items-center mb-6">
           <div>
-            <Skeleton className="h-8 w-48 mb-2" />
-            <Skeleton className="h-4 w-80" />
+            <h1 className="text-3xl font-bold tracking-tight">Role Management</h1>
+            <p className="text-muted-foreground">
+              Manage system roles and permissions
+            </p>
           </div>
-          <Skeleton className="h-10 w-32" />
+          <Button disabled>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Role
+          </Button>
         </div>
 
         {/* Search Skeleton */}

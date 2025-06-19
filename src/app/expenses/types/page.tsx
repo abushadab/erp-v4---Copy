@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Skeleton } from "@/components/ui/skeleton"
 import { 
   Table, 
   TableBody, 
@@ -33,7 +34,13 @@ import {
 import { 
   Plus, 
   Trash2, 
-  ArrowLeft
+  ArrowLeft,
+  Edit,
+  Search,
+  Tags,
+  CheckCircle,
+  XCircle,
+  List
 } from "lucide-react"
 import { toast } from "sonner"
 import { getExpenseTypes, createExpenseType, updateExpenseType, deleteExpenseType, type ExpenseType } from '@/lib/supabase/expenses-client'
@@ -42,6 +49,7 @@ import Link from 'next/link'
 export default function ManageExpenseTypesPage() {
   const [loading, setLoading] = useState(true)
   const [expenseTypes, setExpenseTypes] = useState<ExpenseType[]>([])
+  const [searchTerm, setSearchTerm] = useState('')
 
   const [selectedExpenseType, setSelectedExpenseType] = useState<ExpenseType | null>(null)
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
@@ -74,7 +82,13 @@ export default function ManageExpenseTypesPage() {
     }
   }
 
-  const filteredExpenseTypes = expenseTypes
+  const filteredExpenseTypes = expenseTypes.filter(expenseType =>
+    expenseType.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    expenseType.description?.toLowerCase().includes(searchTerm.toLowerCase())
+  )
+
+  const activeExpenseTypes = expenseTypes.filter(type => type.status === 'active')
+  const inactiveExpenseTypes = expenseTypes.filter(type => type.status === 'inactive')
 
   const handleEditExpenseType = (expenseType: ExpenseType) => {
     setSelectedExpenseType(expenseType)
@@ -180,9 +194,6 @@ export default function ManageExpenseTypesPage() {
 
       const updatedExpenseType = await updateExpenseType(selectedExpenseType.id, updates)
 
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 500))
-
       setExpenseTypes(prev => prev.map(type => 
         type.id === selectedExpenseType.id ? updatedExpenseType : type
       ))
@@ -198,7 +209,7 @@ export default function ManageExpenseTypesPage() {
   }
 
   const formatDate = (dateString: string | null) => {
-    if (!dateString) return '-'
+    if (!dateString) return 'N/A'
     return new Date(dateString).toLocaleDateString('en-BD', {
       year: 'numeric',
       month: 'short',
@@ -206,48 +217,108 @@ export default function ManageExpenseTypesPage() {
     })
   }
 
-  return (
-    <div className="container mx-auto p-6 space-y-6">
-      {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-      >
-        <div className="flex items-center gap-4 mb-4">
-          <Link href="/expenses">
-            <Button variant="outline" size="sm">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Expenses
-            </Button>
-          </Link>
+  // Skeleton loading state
+  if (loading) {
+    return (
+      <div className="container mx-auto px-6 py-8">
+        {/* Search Skeleton */}
+        <div className="flex gap-4 mb-6">
+          <div className="space-y-2 flex-1">
+            <Skeleton className="h-4 w-20" />
+            <Skeleton className="h-10 w-full" />
+          </div>
         </div>
-        <div className="flex justify-between items-center">
+
+        {/* Count Skeleton */}
+        <div className="mb-4">
+          <Skeleton className="h-4 w-32" />
+        </div>
+
+        {/* Table Skeleton */}
+        <Card className="shadow-sm">
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead><Skeleton className="h-4 w-16" /></TableHead>
+                    <TableHead><Skeleton className="h-4 w-24" /></TableHead>
+                    <TableHead><Skeleton className="h-4 w-16" /></TableHead>
+                    <TableHead><Skeleton className="h-4 w-20" /></TableHead>
+                    <TableHead className="text-right"><Skeleton className="h-4 w-16 ml-auto" /></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-48" /></TableCell>
+                      <TableCell><Skeleton className="h-6 w-16" /></TableCell>
+                      <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Skeleton className="h-8 w-8" />
+                          <Skeleton className="h-8 w-8" />
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  return (
+    <div className="container mx-auto px-6 py-8">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
           <div>
             <h1 className="text-3xl font-bold tracking-tight">Expense Types</h1>
-            <p className="text-muted-foreground">Create and manage expense categories for your business</p>
+          <p className="text-muted-foreground mt-2">
+            Create and manage expense categories for your business
+          </p>
           </div>
+        <div className="mt-4 sm:mt-0">
           <Button onClick={() => setIsAddModalOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
             Add Expense Type
           </Button>
         </div>
-      </motion.div>
+      </div>
+
+      {/* Search */}
+      <div className="flex gap-4 mb-6">
+        <div className="space-y-2 flex-1">
+          <Label htmlFor="search">Search</Label>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              id="search"
+              placeholder="Search expense types by name or description..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Expense Type Count */}
+      <div className="mb-4">
+        <p className="text-sm text-muted-foreground">
+          {filteredExpenseTypes.length} of {expenseTypes.length} expense types
+        </p>
+      </div>
 
       {/* Expense Types Table */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.1 }}
-      >
-        <Card>
-          <CardHeader>
-            <CardTitle>Expense Type Categories</CardTitle>
-            <CardDescription>
-              Manage your expense type categories
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+      <Card className="shadow-sm">
+        <CardContent className="p-0">
+          {filteredExpenseTypes.length > 0 ? (
+            <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -255,12 +326,12 @@ export default function ManageExpenseTypesPage() {
                   <TableHead>Description</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Created</TableHead>
-                  <TableHead className="w-[100px]">Actions</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredExpenseTypes.map((expenseType) => (
-                  <TableRow key={expenseType.id}>
+                    <TableRow key={expenseType.id} className="hover:bg-gray-50">
                     <TableCell className="font-medium">{expenseType.name}</TableCell>
                     <TableCell className="max-w-[200px] truncate">
                       {expenseType.description || '-'}
@@ -270,9 +341,13 @@ export default function ManageExpenseTypesPage() {
                         {expenseType.status}
                       </Badge>
                     </TableCell>
-                    <TableCell>{formatDate(expenseType.created_at)}</TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-2">
+                        <div className="text-sm text-muted-foreground">
+                          {formatDate(expenseType.created_at)}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
                         <Button
                           variant="ghost"
                           size="sm"
@@ -297,9 +372,28 @@ export default function ManageExpenseTypesPage() {
                 ))}
               </TableBody>
             </Table>
+            </div>
+          ) : (
+            <div className="p-8 text-center">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-lg bg-gray-100">
+                <Tags className="h-6 w-6 text-gray-600" />
+              </div>
+              <h3 className="mt-2 text-sm font-semibold text-gray-900">No expense types found</h3>
+              <p className="mt-1 text-sm text-gray-500">
+                {searchTerm ? 'No types match your search criteria.' : 'Get started by creating your first expense type.'}
+              </p>
+              {!searchTerm && (
+                <div className="mt-6">
+                  <Button onClick={() => setIsAddModalOpen(true)}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Expense Type
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
           </CardContent>
         </Card>
-      </motion.div>
 
       {/* Add Expense Type Modal */}
       <Dialog open={isAddModalOpen} onOpenChange={(open) => {
@@ -456,42 +550,40 @@ export default function ManageExpenseTypesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Expense Type Modal */}
+      {/* Delete Confirmation Modal */}
       <Dialog open={isDeleteModalOpen} onOpenChange={setIsDeleteModalOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Delete Expense Type</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete this expense type?
+              Are you sure you want to delete "{expenseTypeToDelete?.name}"? This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
-          {expenseTypeToDelete && (
-            <div className="space-y-4">
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">Name</label>
-                <div className="mt-1 text-lg font-semibold">{expenseTypeToDelete.name}</div>
-              </div>
-              <div className="flex gap-2">
+          <div className="flex gap-2 pt-4">
                 <Button 
-                  type="button" 
-                  variant="default"
+              variant="destructive"
                   onClick={() => {
+                if (expenseTypeToDelete) {
                     handleDeleteExpenseType(expenseTypeToDelete.id)
                     setIsDeleteModalOpen(false)
+                  setExpenseTypeToDelete(null)
+                }
                   }}
+              className="flex-1"
                 >
                   Delete
                 </Button>
                 <Button 
-                  type="button" 
                   variant="outline"
-                  onClick={() => setIsDeleteModalOpen(false)}
+              onClick={() => {
+                setIsDeleteModalOpen(false)
+                setExpenseTypeToDelete(null)
+              }}
+              className="flex-1"
                 >
                   Cancel
                 </Button>
               </div>
-            </div>
-          )}
         </DialogContent>
       </Dialog>
     </div>

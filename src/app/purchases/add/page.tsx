@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { motion } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Plus, Trash2, ShoppingCart, Calendar, Package, Box, Search, X, ChevronRight } from "lucide-react"
 import Link from "next/link"
@@ -9,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Select,
   SelectContent,
@@ -60,6 +60,8 @@ import {
   type DatabaseProductVariation,
   type DatabasePackagingVariation
 } from "@/lib/supabase/queries"
+import { apiCache } from "@/lib/supabase/cache"
+import { logPurchaseCreate } from "@/lib/supabase/activity-logger"
 
 interface PurchaseItem {
   itemId: string
@@ -111,6 +113,14 @@ export default function CreatePurchasePage() {
   const [productVariations, setProductVariations] = React.useState<DatabaseProductVariation[]>([])
   const [packageVariations, setPackageVariations] = React.useState<DatabasePackagingVariation[]>([])
   
+  // Deduplication cache and initial load tracker
+  const initialLoadTriggered = React.useRef(false)
+  const CACHE_DURATION = 30000 // 30 seconds
+  
+  // Global component cache to prevent duplicates across all instances
+  const componentCacheKey = 'purchases-add-data'
+  
+  // Remove local cache - use global apiCache instead
   const [form, setForm] = React.useState<PurchaseForm>({
     supplierId: '',
     warehouse: '',
@@ -118,128 +128,78 @@ export default function CreatePurchasePage() {
     items: []
   })
 
-  // Deduplication cache and initial load tracker
-  const initialLoadTriggered = React.useRef(false)
-  const CACHE_DURATION = 30000 // 30 seconds
-  
-  const dataCache = React.useRef<{
-    suppliers: DatabaseSupplier[]
-    warehouses: DatabaseWarehouse[]
-    products: DatabaseProduct[]
-    packages: DatabasePackaging[]
-    lastFetch: number
-    currentRequest: Promise<void> | null
-  }>({
-    suppliers: [],
-    warehouses: [],
-    products: [],
-    packages: [],
-    lastFetch: 0,
-    currentRequest: null
-  })
-
-  // Load data from Supabase with deduplication
-  const loadData = async (forceRefresh = false) => {
-    const now = Date.now()
+  // Load data from Supabase with enhanced deduplication using global cache
+  const loadData = React.useCallback(async (forceRefresh = false, isInitialLoad = false) => {
+    console.log('🔍 loadData called with forceRefresh:', forceRefresh, 'isInitialLoad:', isInitialLoad)
     
-    console.log('🔍 loadData called with forceRefresh:', forceRefresh)
-    
-    // Check cache first - only use cache if data exists and is fresh
-    if (!forceRefresh && 
-        dataCache.current.suppliers.length > 0 && 
-        dataCache.current.warehouses.length > 0 && 
-        (now - dataCache.current.lastFetch) < CACHE_DURATION) {
-      console.log('📦 Using cached data')
-      setSuppliers(dataCache.current.suppliers)
-      setWarehouses(dataCache.current.warehouses)
-      setProducts(dataCache.current.products)
-      setPackages(dataCache.current.packages)
-      setDataLoading(false)
+    // For initial load, we're already in loading state, so don't check dataLoading
+    // For subsequent calls, check if we're already loading to prevent overlapping requests
+    if (!isInitialLoad && dataLoading && !forceRefresh) {
+      console.log('⏳ Data already loading, skipping...')
       return
     }
 
-    // If there's already a request in progress, wait for it
-    if (dataCache.current.currentRequest) {
-      console.log('⏳ Request already in progress, waiting for existing promise...')
-      try {
-        await dataCache.current.currentRequest
-        // After the request completes, update state with cached data
-        if (dataCache.current.suppliers.length > 0) {
-          console.log('📦 Using data from completed request')
-          setSuppliers(dataCache.current.suppliers)
-          setWarehouses(dataCache.current.warehouses)
-          setProducts(dataCache.current.products)
-          setPackages(dataCache.current.packages)
-          setDataLoading(false)
-        }
-      } catch (error) {
-        console.error('⚠️ Error in concurrent request:', error)
-      }
-      return
-    }
-
-    // Create a new request promise
-    const requestPromise = (async () => {
-      try {
-        console.log('🔄 Fetching fresh data from API')
+    try {
+      // Only set loading to true if not already true (for initial load)
+      if (!dataLoading) {
         setDataLoading(true)
-        
-        const [suppliersData, warehousesData, productsData, packagesData] = await Promise.all([
-          getSuppliers(),
-          getWarehouses(),
-          getProducts(),
-          getPackaging()
-        ])
-        
-        const activeProducts = productsData.filter(p => p.status === 'active')
-        const activePackages = packagesData.filter(p => p.status === 'active')
-        
-        console.log('✅ Data fetched successfully')
-        
-        // Update cache
-        dataCache.current.suppliers = suppliersData
-        dataCache.current.warehouses = warehousesData
-        dataCache.current.products = activeProducts
-        dataCache.current.packages = activePackages
-        dataCache.current.lastFetch = now
-        
-        // Update state
-        setSuppliers(suppliersData)
-        setWarehouses(warehousesData)
-        setProducts(activeProducts)
-        setPackages(activePackages)
-      } catch (error) {
-        console.error('❌ Error loading data:', error)
-        toast.error('Failed to load data. Please refresh the page.')
-        setSuppliers([])
-        setWarehouses([])
-        setProducts([])
-        setPackages([])
-      } finally {
-        console.log('🏁 Request completed, setting loading to false')
-        setDataLoading(false)
-        dataCache.current.currentRequest = null
       }
-    })()
+      
+      console.log('🔄 Fetching data using global cache')
+      
+      // Use global apiCache for all data fetching
+      const [suppliersData, warehousesData, productsData, packagesData] = await Promise.all([
+        apiCache.get('suppliers-active', () => getSuppliers()),
+        apiCache.get('warehouses-all', () => getWarehouses()),
+        apiCache.get('products-all', () => getProducts()),
+        apiCache.get('packaging-all', () => getPackaging())
+      ])
+      
+      const activeProducts = productsData.filter(p => p.status === 'active')
+      const activePackages = packagesData.filter(p => p.status === 'active')
+      
+      console.log('✅ Data fetched successfully using global cache', {
+        suppliers: suppliersData.length,
+        warehouses: warehousesData.length,
+        products: activeProducts.length,
+        packages: activePackages.length
+      })
+      
+      // Update state
+      setSuppliers(suppliersData)
+      setWarehouses(warehousesData)
+      setProducts(activeProducts)
+      setPackages(activePackages)
+      
+    } catch (error) {
+      console.error('❌ Error loading data:', error)
+      
+      // Provide fallback data on error
+      setSuppliers([])
+      setWarehouses([])
+      setProducts([])
+      setPackages([])
+      
+      toast.error('Failed to load data. Please refresh the page.')
+    } finally {
+      console.log('🏁 Request completed, setting loading to false')
+      setDataLoading(false)
+    }
+  }, []) // Remove dataLoading dependency to prevent circular re-creation
 
-    // Store the request promise so other calls can wait for it
-    dataCache.current.currentRequest = requestPromise
-    
-    // Wait for the request to complete
-    await requestPromise
-  }
-
-  // Load initial data only once
+  // Load initial data only once with enhanced protection against React Strict Mode
   React.useEffect(() => {
     console.log('🚀 useEffect triggered - mounting component')
+    
+    // Double protection against React Strict Mode
     if (!initialLoadTriggered.current) {
       console.log('🎯 First time loading - triggering data fetch')
       initialLoadTriggered.current = true
-      loadData(false)
+      loadData(false, true) // Pass isInitialLoad = true
     } else {
       console.log('⚠️ useEffect called again but initial load already triggered')
     }
-  }, []) // Empty dependency array to run only once on mount
+  }, []) // Empty dependency array to run only on mount
 
   const selectedSupplier = suppliers.find(s => s.id === form.supplierId)
   const totalAmount = form.items.reduce((sum, item) => sum + item.total, 0)
@@ -370,22 +330,49 @@ export default function CreatePurchasePage() {
     setSelectedPackageForVariation(null)
   }
 
-  const loadVariations = async (item: DatabaseProduct | DatabasePackaging) => {
+  // Cache for variations to prevent duplicate calls
+  const variationsCache = React.useRef<{
+    [key: string]: {
+      data: DatabasePackagingVariation[] | DatabaseProductVariation[]
+      timestamp: number
+      loading: Promise<void> | null
+    }
+  }>({})
+
+  const loadVariations = React.useCallback(async (item: DatabaseProduct | DatabasePackaging) => {
+    const cacheKey = `variations-${item.id}-${isPackaging(item) ? 'package' : 'product'}`
+    
     try {
+      console.log('🔄 Loading variations using global cache for:', cacheKey)
+      
       if (isPackaging(item)) {
-        const variations = await getPackagingVariations(item.id)
+        // Use global cache for packaging variations
+        const variations = await apiCache.get(cacheKey, () => getPackagingVariations(item.id))
         setPackageVariations(variations)
       } else {
         // For products, use the variations from the product object if available
         if (item.variations) {
+          console.log('📦 Using product variations from object:', item.variations.length)
           setProductVariations(item.variations)
+        } else {
+          console.log('⚠️ No variations found in product object')
+          setProductVariations([])
         }
       }
+      
+      console.log('✅ Variations loaded successfully for:', cacheKey)
     } catch (error) {
-      console.error('Error loading variations:', error)
+      console.error('❌ Error loading variations:', error)
       toast.error('Failed to load variations')
+      
+      // Set empty arrays on error
+      if (isPackaging(item)) {
+        setPackageVariations([])
+      } else {
+        setProductVariations([])
+      }
     }
-  }
+  }, [])
 
   const addSelectedItemsToPurchase = () => {
     const newItems: PurchaseItem[] = selectedItems.map(selected => ({
@@ -475,6 +462,21 @@ export default function CreatePurchasePage() {
 
       const createdPurchase = await createPurchase(purchaseData, items)
       
+      // Log the purchase creation activity
+      const totalAmount = form.items.reduce((sum, item) => sum + item.total, 0)
+      await logPurchaseCreate(
+        createdPurchase.id,
+        selectedSupplier.name,
+        totalAmount,
+        {
+          items: form.items.length,
+          warehouse: selectedWarehouse.name,
+          date: form.date
+        }
+      ).catch(error => {
+        console.warn('Failed to log purchase creation:', error)
+      })
+      
       toast.success('Purchase order created successfully!')
       router.push(`/purchases/${createdPurchase.id}`)
       
@@ -550,28 +552,148 @@ export default function CreatePurchasePage() {
   if (dataLoading) {
     return (
       <div className="container mx-auto px-6 py-8">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading purchase data...</p>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Main Content Skeleton */}
+          <div className="lg:col-span-2 space-y-8">
+            {/* Basic Information Card Skeleton */}
+            <Card>
+              <CardHeader>
+                <Skeleton className="h-6 w-40" />
+                <Skeleton className="h-4 w-72" />
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Skeleton className="h-4 w-20" />
+                    <Skeleton className="h-10 w-full" />
+                  </div>
+                  <div className="space-y-2">
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-10 w-full" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Skeleton className="h-4 w-28" />
+                    <Skeleton className="h-10 w-full" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Items Section Skeleton */}
+            <Card>
+              <CardHeader>
+                <Skeleton className="h-6 w-32" />
+                <Skeleton className="h-4 w-80" />
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-10 w-48" />
+                </div>
+                
+                {/* Sample Item Skeletons */}
+                <div className="space-y-4">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="border rounded-lg p-4">
+                      <div className="flex items-start gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start gap-3">
+                            <Skeleton className="h-5 w-5 mt-1" />
+                            <div className="flex-1 min-w-0">
+                              <Skeleton className="h-5 w-48 mb-1" />
+                              <div className="flex items-center gap-2 mb-3">
+                                <Skeleton className="h-5 w-16" />
+                                <Skeleton className="h-5 w-20" />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <div className="text-center">
+                            <Skeleton className="h-3 w-12 mb-1" />
+                            <Skeleton className="h-9 w-20" />
+                          </div>
+                          <div className="text-center">
+                            <Skeleton className="h-3 w-20 mb-1" />
+                            <Skeleton className="h-9 w-28" />
+                          </div>
+                          <div className="text-center min-w-[80px]">
+                            <Skeleton className="h-3 w-8 mb-1" />
+                            <Skeleton className="h-6 w-16" />
+                          </div>
+                          <Skeleton className="h-9 w-9 rounded-full" />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Sidebar Skeleton - Hidden on mobile, shown on lg+ screens */}
+          <div className="hidden lg:block space-y-6">
+            {/* Purchase Summary Skeleton */}
+            <Card>
+              <CardHeader>
+                <Skeleton className="h-6 w-36" />
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Skeleton className="h-4 w-28" />
+                  <div className="space-y-1">
+                    <Skeleton className="h-3 w-32" />
+                    <Skeleton className="h-3 w-40" />
+                    <Skeleton className="h-3 w-36" />
+                  </div>
+                </div>
+                
+                <div className="border-t pt-4 space-y-2">
+                  <div className="flex justify-between">
+                    <Skeleton className="h-4 w-20" />
+                    <Skeleton className="h-4 w-8" />
+                  </div>
+                  <div className="flex justify-between">
+                    <Skeleton className="h-4 w-16" />
+                    <Skeleton className="h-4 w-8" />
+                  </div>
+                  <div className="flex justify-between">
+                    <Skeleton className="h-4 w-18" />
+                    <Skeleton className="h-4 w-8" />
+                  </div>
+                  <div className="flex justify-between">
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-4 w-12" />
+                  </div>
+                  <div className="flex justify-between pt-2 border-t">
+                    <Skeleton className="h-5 w-24" />
+                    <Skeleton className="h-5 w-20" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Actions Skeleton */}
+            <Card>
+              <CardContent className="pt-6">
+                <div className="space-y-4">
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full" />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
     )
   }
 
   return (
-    <motion.div
-      className="container mx-auto px-6 py-8"
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: "easeOut" }}
-    >
+    <div className="container mx-auto px-6 py-8">
       {/* Header */}
-      <motion.div 
-        className="flex items-center gap-4 mb-8"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.6, delay: 0.1 }}
-      >
+      <div className="flex items-center gap-4 mb-8">
         <Link href="/purchases">
           <Button variant="outline" size="sm">
             <ArrowLeft className="mr-2 h-4 w-4" />
@@ -584,22 +706,12 @@ export default function CreatePurchasePage() {
             Add a new purchase order for products and packages from a supplier
           </p>
         </div>
-      </motion.div>
+      </div>
 
       <form onSubmit={handleSubmit}>
-        <motion.div 
-          className="grid grid-cols-1 lg:grid-cols-3 gap-8"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.6, delay: 0.2 }}
-        >
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Purchase Details */}
-          <motion.div 
-            className="lg:col-span-2 space-y-8" 
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.4, delay: 0.3 }}
-          >
+          <div className="lg:col-span-2 space-y-8">
             {/* Basic Information */}
             <Card>
               <CardHeader>
@@ -693,7 +805,7 @@ export default function CreatePurchasePage() {
                   >
                     <Plus className="h-4 w-4" />
                     Choose Product or Package
-                    </Button>
+                  </Button>
                 </div>
 
                 {/* Items List */}
@@ -735,7 +847,7 @@ export default function CreatePurchasePage() {
                                   </div>
                                 </div>
                               </div>
-                  </div>
+                            </div>
 
                             {/* Quantity & Price Controls */}
                             <div className="flex items-center gap-4">
@@ -744,16 +856,16 @@ export default function CreatePurchasePage() {
                                 <Label htmlFor={`qty-${index}`} className="text-xs text-muted-foreground block mb-1">
                                   Quantity
                                 </Label>
-                    <Input
+                                <Input
                                   id={`qty-${index}`}
-                      type="number"
-                      min="1"
+                                  type="number"
+                                  min="1"
                                   value={item.quantity || ''}
                                   onChange={(e) => updateItemQuantity(index, e.target.value)}
                                   placeholder="1"
                                   className="w-20 h-9 text-center"
-                    />
-                  </div>
+                                />
+                              </div>
 
                               {/* Unit Price */}
                               <div className="text-center">
@@ -762,26 +874,26 @@ export default function CreatePurchasePage() {
                                 </Label>
                                 <div className="relative">
                                   <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-sm text-muted-foreground">৳</span>
-                    <Input
+                                  <Input
                                     id={`price-${index}`}
-                      type="number"
-                      min="0"
-                      step="0.01"
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
                                     value={item.purchasePrice || ''}
                                     onChange={(e) => updateItemPrice(index, e.target.value)}
-                      placeholder="0.00"
+                                    placeholder="0.00"
                                     className="w-28 h-9 pl-8 text-center"
-                    />
+                                  />
                                 </div>
-                  </div>
+                              </div>
 
                               {/* Total */}
                               <div className="text-center min-w-[80px]">
                                 <div className="text-xs text-muted-foreground mb-1">Total</div>
                                 <div className="font-semibold text-lg text-gray-900">
                                   {formatCurrency(item.total)}
-                  </div>
-                </div>
+                                </div>
+                              </div>
 
                               {/* Remove Button */}
                               <Button
@@ -822,10 +934,10 @@ export default function CreatePurchasePage() {
                 )}
               </CardContent>
             </Card>
-          </motion.div>
+          </div>
 
           {/* Summary Sidebar */}
-          <motion.div className="space-y-6" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4, delay: 0.3 }}>
+          <div className="space-y-6">
             {/* Purchase Summary */}
             <Card>
               <CardHeader>
@@ -878,11 +990,7 @@ export default function CreatePurchasePage() {
                     disabled={isLoading || form.items.length === 0}
                   >
                     {isLoading ? (
-                      <motion.div
-                        className="mr-2 h-4 w-4 border-2 border-current border-t-transparent rounded-full"
-                        animate={{ rotate: 360 }}
-                        transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                      />
+                      <div className="mr-2 h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
                     ) : (
                       <ShoppingCart className="mr-2 h-4 w-4" />
                     )}
@@ -897,8 +1005,8 @@ export default function CreatePurchasePage() {
                 </div>
               </CardContent>
             </Card>
-          </motion.div>
-        </motion.div>
+          </div>
+        </div>
       </form>
 
       {/* Item Selection Modal */}
@@ -1109,7 +1217,7 @@ export default function CreatePurchasePage() {
                       <div className="flex items-center gap-2 mb-1">
                         <span className="font-medium">{variation.sku}</span>
                         <Badge variant="outline" className="text-xs">
-                                                     {variation.attribute_values?.map(av => av.value_label).join(', ') || variation.sku}
+                          {variation.attribute_values?.map(av => av.value_label).join(', ') || variation.sku}
                         </Badge>
                       </div>
                       <div className="flex items-center gap-4 text-sm text-muted-foreground">
@@ -1137,7 +1245,7 @@ export default function CreatePurchasePage() {
                       <div className="flex items-center gap-2 mb-1">
                         <span className="font-medium">{variation.sku}</span>
                         <Badge variant="outline" className="text-xs">
-                                                  {variation.attribute_values?.map(av => av.value_label).join(', ') || variation.sku}
+                          {variation.attribute_values?.map(av => av.value_label).join(', ') || variation.sku}
                         </Badge>
                       </div>
                       <div className="flex items-center gap-4 text-sm text-muted-foreground">
@@ -1193,6 +1301,6 @@ export default function CreatePurchasePage() {
           </div>
         </DialogContent>
       </Dialog>
-    </motion.div>
+    </div>
   )
 } 

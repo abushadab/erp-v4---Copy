@@ -319,17 +319,6 @@ export default function CategoriesPage() {
   if (isLoading) {
     return (
       <div className="flex-1 space-y-6 p-6">
-        {/* Header Skeleton */}
-        <div className="flex items-center justify-between">
-          <div>
-            <Skeleton className="h-8 w-48 mb-2" />
-            <Skeleton className="h-4 w-80" />
-          </div>
-          <div className="flex gap-3">
-            <Skeleton className="h-10 w-32" />
-          </div>
-        </div>
-
         {/* Table Skeleton */}
         <Card className="shadow-sm">
           <CardContent className="p-0">

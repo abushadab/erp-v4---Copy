@@ -906,15 +906,6 @@ export default function AddProductPage() {
   if (isPageLoading) {
     return (
       <div className="container mx-auto px-6 py-8">
-        {/* Header Skeleton */}
-        <div className="flex items-center gap-4 mb-8">
-          <Skeleton className="h-9 w-32" />
-          <div className="flex-1">
-            <Skeleton className="h-8 w-48 mb-2" />
-            <Skeleton className="h-4 w-80" />
-          </div>
-        </div>
-
         {/* Form Skeleton */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Main Content Skeleton */}

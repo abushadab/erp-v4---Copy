@@ -308,15 +308,22 @@ export default function ExpensesPage() {
   if (loading) {
     return (
       <div className="container mx-auto px-6 py-8">
-        {/* Header Skeleton */}
-        <div className="flex items-center justify-between mb-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
           <div>
-            <Skeleton className="h-8 w-48 mb-2" />
-            <Skeleton className="h-4 w-80" />
+            <h1 className="text-3xl font-bold tracking-tight">Expenses</h1>
+            <p className="text-muted-foreground mt-2">
+              Manage and track your business expenses
+            </p>
           </div>
-          <div className="flex gap-2">
-            <Skeleton className="h-10 w-32" />
-            <Skeleton className="h-10 w-32" />
+          <div className="mt-4 sm:mt-0 flex gap-2">
+            <Button variant="outline" disabled>
+              Expense Types
+            </Button>
+            <Button disabled>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Expense
+            </Button>
           </div>
         </div>
 
@@ -572,7 +579,8 @@ export default function ExpensesPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Expense Type / Date</TableHead>
+                    <TableHead>Expense Type</TableHead>
+                    <TableHead>Date</TableHead>
                     <TableHead>Amount</TableHead>
                     <TableHead>Created By</TableHead>
                     <TableHead>Description</TableHead>
@@ -583,15 +591,13 @@ export default function ExpensesPage() {
                   {filteredExpenses.map((expense) => (
                     <TableRow key={expense.id} className="hover:bg-gray-50">
                       <TableCell>
-                        <div>
-                          <div className="font-medium">
                             <Badge variant="secondary">
                               {expense.expense_type_name}
                             </Badge>
-                          </div>
+                      </TableCell>
+                      <TableCell>
                           <div className="text-sm text-muted-foreground">
                             {formatDate(expense.expense_date)}
-                          </div>
                         </div>
                       </TableCell>
                       <TableCell>

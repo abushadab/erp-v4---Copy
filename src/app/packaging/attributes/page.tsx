@@ -281,20 +281,6 @@ export default function PackagingAttributesPage() {
   if (loading) {
     return (
       <div className="container mx-auto px-6 py-8">
-        {/* Header Skeleton */}
-        <div className="flex items-center gap-4 mb-8">
-          <Skeleton className="h-10 w-32" />
-          <div className="flex-1">
-            <div className="flex items-center justify-between">
-              <div>
-                <Skeleton className="h-8 w-52 mb-2" />
-                <Skeleton className="h-4 w-64" />
-              </div>
-              <Skeleton className="h-10 w-32" />
-            </div>
-          </div>
-        </div>
-
         {/* Table Skeleton */}
         <Card className="shadow-sm">
           <CardContent className="p-0">

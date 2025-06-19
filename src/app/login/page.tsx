@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { logLogin } from '@/lib/supabase/activity-logger'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card'
@@ -31,6 +32,11 @@ export default function LoginPage() {
       if (error) {
         setError(error.message)
       } else {
+        // Log successful login activity
+        logLogin().catch(error => {
+          console.warn('Failed to log login activity:', error)
+        })
+        
         router.push('/dashboard')
         router.refresh()
       }
@@ -86,6 +92,7 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 disabled={isLoading}
+                suppressHydrationWarning
               />
             </div>
             <div className="space-y-2">
@@ -102,6 +109,7 @@ export default function LoginPage() {
                   required
                   disabled={isLoading}
                   className="pr-10"
+                  suppressHydrationWarning
                 />
                 <button
                   type="button"
@@ -122,7 +130,7 @@ export default function LoginPage() {
                 {error}
               </div>
             )}
-            <Button type="submit" className="w-full" disabled={isLoading}>
+            <Button type="submit" className="w-full" disabled={isLoading} suppressHydrationWarning>
               {isLoading ? 'Signing in...' : 'Sign In'}
             </Button>
           </form>
@@ -136,6 +144,7 @@ export default function LoginPage() {
             onClick={handleSignUp} 
             disabled={isLoading}
             className="w-full"
+            suppressHydrationWarning
           >
             {isLoading ? 'Creating account...' : 'Create Account'}
           </Button>

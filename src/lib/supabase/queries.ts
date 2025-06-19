@@ -1,4 +1,5 @@
 import { createClient } from './client'
+import { apiCache } from './cache'
 
 export interface DatabaseProduct {
   id: string
@@ -151,65 +152,67 @@ export interface DatabasePackagingWarehouseStock {
 }
 
 export async function getProducts(): Promise<DatabaseProduct[]> {
-  const supabase = createClient()
-  
-  const { data: products, error } = await supabase
-    .from('products')
-    .select(`
-      *,
-      category:categories(id, name, slug)
-    `)
-    .order('created_at', { ascending: false })
-
-  if (error) {
-    console.error('Error fetching products:', error)
-    throw new Error('Failed to fetch products')
-  }
-
-  // Get variations for variation products
-  const variationProductIds = products
-    .filter(p => p.type === 'variation')
-    .map(p => p.id)
-
-  let variationsWithAttributes: any[] = []
-  if (variationProductIds.length > 0) {
-    const { data: variations, error: variationsError } = await supabase
-      .from('product_variations')
+  return apiCache.get('products-all', async () => {
+    const supabase = createClient()
+    
+    const { data: products, error } = await supabase
+      .from('products')
       .select(`
         *,
-        product_variation_attributes(
-          attribute_id,
-          attribute_value_id,
-          attributes!inner(id, name, type),
-          attribute_values!inner(id, value, label)
-        )
+        category:categories(id, name, slug)
       `)
-      .in('product_id', variationProductIds)
+      .order('created_at', { ascending: false })
 
-    if (variationsError) {
-      console.error('Error fetching variations:', variationsError)
-    } else {
-      variationsWithAttributes = variations || []
+    if (error) {
+      console.error('Error fetching products:', error)
+      throw new Error('Failed to fetch products')
     }
-  }
 
-  // Transform the data to include variations
-  return products.map(product => ({
-    ...product,
-    variations: product.type === 'variation' 
-      ? variationsWithAttributes
-          .filter(v => v.product_id === product.id)
-          .map(variation => ({
-            ...variation,
-            attribute_values: variation.product_variation_attributes.map((pva: any) => ({
-              attribute_id: pva.attribute_id,
-              attribute_name: pva.attributes.name,
-              value_id: pva.attribute_value_id,
-              value_label: pva.attribute_values.label
+    // Get variations for variation products
+    const variationProductIds = products
+      .filter(p => p.type === 'variation')
+      .map(p => p.id)
+
+    let variationsWithAttributes: any[] = []
+    if (variationProductIds.length > 0) {
+      const { data: variations, error: variationsError } = await supabase
+        .from('product_variations')
+        .select(`
+          *,
+          product_variation_attributes(
+            attribute_id,
+            attribute_value_id,
+            attributes!inner(id, name, type),
+            attribute_values!inner(id, value, label)
+          )
+        `)
+        .in('product_id', variationProductIds)
+
+      if (variationsError) {
+        console.error('Error fetching variations:', variationsError)
+      } else {
+        variationsWithAttributes = variations || []
+      }
+    }
+
+    // Transform the data to include variations
+    return products.map(product => ({
+      ...product,
+      variations: product.type === 'variation' 
+        ? variationsWithAttributes
+            .filter(v => v.product_id === product.id)
+            .map(variation => ({
+              ...variation,
+              attribute_values: variation.product_variation_attributes.map((pva: any) => ({
+                attribute_id: pva.attribute_id,
+                attribute_name: pva.attributes.name,
+                value_id: pva.attribute_value_id,
+                value_label: pva.attribute_values.label
+              }))
             }))
-          }))
-      : undefined
-  }))
+        : undefined
+    }))
+  })
 }
 
 export async function getProductById(id: string): Promise<DatabaseProduct | null> {
@@ -524,29 +527,38 @@ export async function getPackagingAttributes(): Promise<DatabasePackagingAttribu
   
   console.log('🔄 getPackagingAttributes() - Fetching fresh data')
   
-  // Create new request
+  // Create new request with timeout and proper cleanup
   packagingAttributesCache.promise = (async () => {
     try {
-  const supabase = createClient()
-  
-  const { data, error } = await supabase
-    .from('packaging_attributes')
-    .select(`
-      *,
-      values:packaging_attribute_values(id, value, label, slug, sort_order, created_at)
-    `)
-    .eq('status', 'active')
-    .order('name')
+      const supabase = createClient()
+      
+      // Add timeout to prevent hanging forever
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => {
+        controller.abort()
+        console.error('⏰ getPackagingAttributes() - Request timed out after 10 seconds')
+      }, 10000) // 10 second timeout
+      
+      const { data, error } = await supabase
+        .from('packaging_attributes')
+        .select(`
+          *,
+          values:packaging_attribute_values(id, value, label, slug, sort_order, created_at)
+        `)
+        .eq('status', 'active')
+        .order('name')
+      
+      clearTimeout(timeoutId)
 
-  if (error) {
-    console.error('Error fetching packaging attributes:', error)
-    throw new Error('Failed to fetch packaging attributes')
-  }
+      if (error) {
+        console.error('❌ getPackagingAttributes() - Error fetching packaging attributes:', error)
+        throw new Error(`Failed to fetch packaging attributes: ${error.message}`)
+      }
 
       const transformedData = data?.map(attr => ({
-    ...attr,
-    values: attr.values?.sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0))
-  })) || []
+        ...attr,
+        values: attr.values?.sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0))
+      })) || []
 
       // Cache the result
       packagingAttributesCache.data = transformedData
@@ -554,9 +566,17 @@ export async function getPackagingAttributes(): Promise<DatabasePackagingAttribu
       console.log('✅ getPackagingAttributes() - Data cached successfully')
       
       return transformedData
+    } catch (error) {
+      console.error('💥 getPackagingAttributes() - Promise failed:', error)
+      // Return empty array as fallback instead of throwing
+      const fallbackData: DatabasePackagingAttribute[] = []
+      packagingAttributesCache.data = fallbackData
+      packagingAttributesCache.timestamp = now
+      return fallbackData
     } finally {
-      // Clear the promise
+      // CRITICAL: Always clear the promise, even on error
       packagingAttributesCache.promise = null
+      console.log('🧹 getPackagingAttributes() - Promise cleaned up')
     }
   })()
   
@@ -684,78 +704,49 @@ const packagingCache = {
 
 // Packaging queries
 export async function getPackaging(): Promise<DatabasePackaging[]> {
-  const now = Date.now()
-  
-  // Return cached data if fresh
-  if (packagingCache.data && (now - packagingCache.timestamp) < packagingCache.CACHE_DURATION) {
-    console.log('📦 getPackaging() - Using cached data')
-    return packagingCache.data
-  }
-  
-  // If there's already a request in progress, return it
-  if (packagingCache.promise) {
-    console.log('⏳ getPackaging() - Request already in progress, waiting...')
-    return packagingCache.promise
-  }
-  
-  console.log('🔄 getPackaging() - Fetching fresh data')
-  
-  // Create new request
-  packagingCache.promise = (async () => {
-    try {
-  const supabase = createClient()
-  
-  const { data, error } = await supabase
-    .from('packaging')
-    .select(`
-      *,
-      variations:packaging_variations(
-        id,
-        sku,
-        created_at,
-        updated_at,
-        variation_attributes:packaging_variation_attributes(
-          attribute_id,
-          attribute_value_id,
-          attribute:packaging_attributes(name),
-          value:packaging_attribute_values(value, label)
+  return apiCache.get('packaging-all', async () => {
+    const supabase = createClient()
+    
+    const { data, error } = await supabase
+      .from('packaging')
+      .select(`
+        *,
+        variations:packaging_variations(
+          id,
+          sku,
+          created_at,
+          updated_at,
+          variation_attributes:packaging_variation_attributes(
+            attribute_id,
+            attribute_value_id,
+            attribute:packaging_attributes(name),
+            value:packaging_attribute_values(value, label)
+          )
         )
-      )
-    `)
-    .order('title')
+      `)
+      .order('title')
 
-  if (error) {
-    console.error('Error fetching packaging:', error)
-    throw new Error('Failed to fetch packaging')
-  }
+    if (error) {
+      console.error('Error fetching packaging:', error)
+      throw new Error('Failed to fetch packaging')
+    }
 
-  // Transform the data to include attribute values in the expected format
-  const transformedData = data?.map(packaging => ({
-    ...packaging,
-    variations: packaging.variations?.map((variation: any) => ({
-      ...variation,
-      attribute_values: variation.variation_attributes?.map((attr: any) => ({
-        attribute_id: attr.attribute_id,
-        attribute_name: attr.attribute?.name || '',
-        value_id: attr.attribute_value_id,
-        value_label: attr.value?.label || attr.value?.value || ''
+    // Transform the data to include attribute values in the expected format
+    const transformedData = data?.map(packaging => ({
+      ...packaging,
+      variations: packaging.variations?.map((variation: any) => ({
+        ...variation,
+        attribute_values: variation.variation_attributes?.map((attr: any) => ({
+          attribute_id: attr.attribute_id,
+          attribute_name: attr.attribute?.name || '',
+          value_id: attr.attribute_value_id,
+          value_label: attr.value?.label || attr.value?.value || ''
+        })) || []
       })) || []
     })) || []
-      })) || []
-
-      // Cache the result
-      packagingCache.data = transformedData
-      packagingCache.timestamp = now
-      console.log('✅ getPackaging() - Data cached successfully')
-      
-      return transformedData
-    } finally {
-      // Clear the promise
-      packagingCache.promise = null
-    }
-  })()
-  
-  return packagingCache.promise
+    
+    return transformedData
+  })
 }
 
 // Function to invalidate packaging cache (call this after CREATE/UPDATE/DELETE operations)
@@ -952,4 +943,76 @@ export async function getTotalProductVariationStock(productId: string, variation
   }
 
   return data?.reduce((total, item) => total + (item.current_stock || 0), 0) || 0
+}
+
+// Global cache for recent activities to prevent duplicate API calls
+const recentActivitiesCache = {
+  data: null as any[] | null,
+  timestamp: 0,
+  promise: null as Promise<any[]> | null,
+  CACHE_DURATION: 30000 // 30 seconds
+}
+
+// Activity queries with request deduplication
+export async function getRecentActivities(limit: number = 100): Promise<any[]> {
+  const now = Date.now()
+  
+  // Return cached data if fresh
+  if (recentActivitiesCache.data && (now - recentActivitiesCache.timestamp) < recentActivitiesCache.CACHE_DURATION) {
+    console.log('📋 getRecentActivities() - Using cached data')
+    return recentActivitiesCache.data
+  }
+  
+  // If there's already a request in progress, return it
+  if (recentActivitiesCache.promise) {
+    console.log('⏳ getRecentActivities() - Request already in progress, waiting...')
+    return recentActivitiesCache.promise
+  }
+  
+  console.log('🔄 getRecentActivities() - Fetching fresh data')
+  
+  // Create new request with timeout
+  recentActivitiesCache.promise = (async (): Promise<any[]> => {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
+    
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase.rpc('get_recent_activities', {
+        p_limit: limit
+      }).abortSignal(controller.signal)
+
+      if (error) {
+        console.error('Error fetching recent activities:', error)
+        throw new Error('Failed to fetch recent activities')
+      }
+
+      const result = data || []
+
+      // Update cache with result
+      recentActivitiesCache.data = result
+      recentActivitiesCache.timestamp = now
+
+      return result
+    } catch (error) {
+      console.error('❌ Error in getRecentActivities():', error)
+      // Return empty array as fallback
+      return []
+    } finally {
+      clearTimeout(timeoutId)
+      recentActivitiesCache.promise = null
+    }
+  })()
+
+  return recentActivitiesCache.promise
+}
+
+/**
+ * Clear recent activities cache
+ */
+export function clearRecentActivitiesCache(): void {
+  console.log('🗑️ Clearing recent activities cache')
+  recentActivitiesCache.data = null
+  recentActivitiesCache.timestamp = 0
+  recentActivitiesCache.promise = null
 }

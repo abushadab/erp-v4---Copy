@@ -33,7 +33,9 @@ import {
   CreditCard,
   Box,
   Receipt,
-  Shield
+  Shield,
+  FileText,
+  Activity
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -90,7 +92,6 @@ const navigation: NavItem[] = [
     icon: ShoppingBag,
     submenu: [
       { name: 'Create Purchase', href: '/purchases/add', icon: ShoppingCart },
-      { name: 'Stock Movements', href: '/products/stock-movements', icon: RotateCcw },
       { name: 'Suppliers', href: '/purchases/suppliers', icon: UserPlus },
     ]
   },
@@ -110,6 +111,15 @@ const navigation: NavItem[] = [
       { name: 'New Sale', href: '/sales/new', icon: ShoppingCart },
       { name: 'Customers', href: '/sales/customers', icon: UserCheck },
       { name: 'Returns', href: '/sales/returns', icon: RotateCcw },
+    ]
+  },
+  { 
+    name: 'Logs', 
+    href: '/logs/activity', 
+    icon: FileText,
+    submenu: [
+      { name: 'Activity Logs', href: '/logs/activity', icon: Activity },
+      { name: 'Stock Movements', href: '/logs/stock-movements', icon: RotateCcw },
     ]
   },
   { 
@@ -175,12 +185,7 @@ export function Sidebar({ children }: SidebarProps) {
   // First useEffect to set mounted state
   React.useEffect(() => {
     console.log('🚀 Sidebar mounting, setting mounted to true')
-    // Add a small delay to make skeleton more visible for testing
-    const timer = setTimeout(() => {
-      setMounted(true)
-    }, 500)
-    
-    return () => clearTimeout(timer)
+    setMounted(true)
   }, [])
 
   // Second useEffect for scroll detection
@@ -246,10 +251,10 @@ export function Sidebar({ children }: SidebarProps) {
     if (pathname.startsWith('/sales/') || pathname.startsWith('/returns')) {
       setExpandedMenus(prev => prev.includes('Sales') ? prev : [...prev, 'Sales'])
     }
-    if (pathname.startsWith('/purchases/') || pathname === '/products/stock-movements') {
+    if (pathname.startsWith('/purchases/')) {
       setExpandedMenus(prev => prev.includes('Purchases') ? prev : [...prev, 'Purchases'])
     }
-    if (pathname.startsWith('/products/') && pathname !== '/products/stock-movements') {
+    if (pathname.startsWith('/products/') && !pathname.startsWith('/products/stock-movements')) {
       setExpandedMenus(prev => prev.includes('Products') ? prev : [...prev, 'Products'])
     }
     if (pathname.startsWith('/expenses/')) {
@@ -257,6 +262,9 @@ export function Sidebar({ children }: SidebarProps) {
     }
     if (pathname.startsWith('/accounts') || pathname.startsWith('/transactions')) {
       setExpandedMenus(prev => prev.includes('Accounts') ? prev : [...prev, 'Accounts'])
+    }
+    if (pathname.startsWith('/logs/')) {
+      setExpandedMenus(prev => prev.includes('Logs') ? prev : [...prev, 'Logs'])
     }
   }, [pathname])
 
@@ -276,12 +284,11 @@ export function Sidebar({ children }: SidebarProps) {
   const isMenuExpanded = (menuName: string) => expandedMenus.includes(menuName)
 
   // Prevent hydration mismatch
-  console.log('🔍 Sidebar render - mounted:', mounted, 'pathname:', pathname)
-  if (!mounted) {
+   if (!mounted) {
     return (
       <div className="flex h-screen bg-background">
-        {/* Sidebar Skeleton */}
-        <div className="w-64 bg-background border-r" suppressHydrationWarning>
+        {/* Sidebar Skeleton - Hidden on mobile, shown on lg+ screens */}
+        <div className="hidden lg:block w-64 bg-background border-r" suppressHydrationWarning>
           <div className="flex flex-col h-full">
             {/* Logo Skeleton */}
             <div className="flex items-center justify-between px-6 py-4" style={{ minHeight: '72px' }} suppressHydrationWarning>
@@ -314,13 +321,7 @@ export function Sidebar({ children }: SidebarProps) {
                 <div className="h-9 w-9 rounded-md animate-pulse" style={{ backgroundColor: '#e2e8f0' }}></div>
                 
                 {/* User Profile Skeleton */}
-                <div className="flex items-center h-11 px-2 py-2 rounded-md animate-pulse" style={{ backgroundColor: '#e2e8f0', minWidth: '180px' }} suppressHydrationWarning>
-                  <div className="h-8 w-8 rounded-full mr-3" style={{ backgroundColor: '#d1d5db' }}></div>
-                  <div className="flex flex-col space-y-1">
-                    <div className="h-3.5 w-20 rounded" style={{ backgroundColor: '#d1d5db' }}></div>
-                    <div className="h-3 w-12 rounded" style={{ backgroundColor: '#d1d5db' }}></div>
-                  </div>
-                </div>
+                <UserProfile />
               </div>
             </div>
           </header>
@@ -384,19 +385,20 @@ export function Sidebar({ children }: SidebarProps) {
               
               // Enhanced logic for parent active state - includes edit sale pages and returns
               const isParentActive = hasSubmenu && item.submenu ? 
-                // Special handling for Stock Movements under Purchases
-                (item.name === 'Purchases' && pathname === '/products/stock-movements') ||
-                // Regular submenu matching (excluding stock movements for other menus)
-                (item.name !== 'Purchases' && item.submenu.some(sub => pathname.startsWith(sub.href) && sub.href !== '/products/stock-movements')) ||
-                (item.name === 'Purchases' && item.submenu.some(sub => pathname.startsWith(sub.href) && sub.href !== '/products/stock-movements')) ||
+                // Special handling for Stock Movements under Logs
+                (item.name === 'Logs' && pathname === '/logs/stock-movements') ||
+                // Regular submenu matching
+                (item.submenu.some(sub => pathname.startsWith(sub.href))) ||
                 // Sales specific logic
                 (item.name === 'Sales' && (pathname.startsWith('/sales/') && pathname.includes('/edit'))) ||
                 (item.name === 'Sales' && pathname.startsWith('/sales/') && !pathname.includes('/add') && !pathname.includes('/customers') && !pathname.includes('/returns')) ||
                 (item.name === 'Sales' && pathname.startsWith('/returns')) ||
-                // Purchases specific logic (excluding stock movements since it's handled above)
+                // Purchases specific logic
                 (item.name === 'Purchases' && pathname.startsWith('/purchases/') && !pathname.includes('/add') && !pathname.includes('/suppliers')) ||
-                // Products specific logic (excluding stock movements)
-                (item.name === 'Products' && pathname.startsWith('/products/') && pathname !== '/products/stock-movements' && !pathname.includes('/add') && !pathname.includes('/attributes') && !pathname.includes('/categories'))
+                // Products specific logic
+                (item.name === 'Products' && pathname.startsWith('/products/') && !pathname.includes('/add') && !pathname.includes('/attributes') && !pathname.includes('/categories')) ||
+                // Logs specific logic
+                (item.name === 'Logs' && pathname.startsWith('/logs/') && !pathname.includes('/activity'))
                 : false
               
               return (
@@ -525,7 +527,7 @@ export function Sidebar({ children }: SidebarProps) {
             <div className="flex items-center space-x-4">
               {/* Notifications */}
               <div>
-                <Button variant="ghost" size="sm" className="relative transition-colors" style={{'--hover-bg': '#d4dfe1'} as React.CSSProperties} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#d4dfe1'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                <Button variant="ghost" size="sm" className="relative" style={{ backgroundColor: '#d4dfe1' }}>
                   <Bell className="h-5 w-5" />
                   <span className="absolute -top-1 -right-1 h-3 w-3 bg-destructive rounded-full text-xs" />
                 </Button>

@@ -99,18 +99,23 @@ export default function SettingsPage() {
   const [isInitializingAccounts, setIsInitializingAccounts] = React.useState(false)
   const [fixingStatuses, setFixingStatuses] = React.useState(false)
 
-  // Check if chart of accounts exists on component mount
+  // Check if chart of accounts exists on component mount (only once)
   React.useEffect(() => {
     const checkAccounts = async () => {
       try {
+        console.log('🏗️ Settings page: Checking if accounts exist...')
         const exists = await checkChartOfAccountsExists()
+        console.log('🏗️ Settings page: Accounts exist result:', exists)
         setAccountsExist(exists)
       } catch (error) {
         console.error('Error checking accounts:', error)
+        setAccountsExist(false) // Default to false on error
       }
     }
+    
+    // Only check once when component mounts
     checkAccounts()
-  }, [])
+  }, []) // No dependencies to prevent re-runs
 
   const handleSave = () => {
     // Placeholder for save functionality
@@ -121,11 +126,12 @@ export default function SettingsPage() {
     setIsInitializingAccounts(true)
     try {
       await initializeChartOfAccounts()
-      setAccountsExist(true)
+      setAccountsExist(true) // Set to true directly since initialization succeeded
       toast.success("Chart of accounts initialized successfully!")
     } catch (error) {
       console.error("Failed to initialize accounts:", error)
       toast.error(`Failed to initialize accounts: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      setAccountsExist(false) // Set to false on error
     } finally {
       setIsInitializingAccounts(false)
     }
@@ -274,25 +280,25 @@ export default function SettingsPage() {
             Manage your system preferences and configuration
           </p>
         </div>
-        <Button onClick={handleSave}>
+        <Button onClick={handleSave} suppressHydrationWarning>
           <Save className="mr-2 h-4 w-4" />
           Save Changes
         </Button>
       </div>
 
-      <Tabs defaultValue="general" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-6">
-          <TabsTrigger value="general">General</TabsTrigger>
-          <TabsTrigger value="account">Account</TabsTrigger>
-          <TabsTrigger value="notifications">Notifications</TabsTrigger>
-          <TabsTrigger value="security">Security</TabsTrigger>
-          <TabsTrigger value="appearance">Appearance</TabsTrigger>
-          <TabsTrigger value="system">System</TabsTrigger>
+      <Tabs defaultValue="general" className="space-y-6" suppressHydrationWarning>
+        <TabsList className="grid w-full grid-cols-6" suppressHydrationWarning>
+          <TabsTrigger value="general" suppressHydrationWarning>General</TabsTrigger>
+          <TabsTrigger value="account" suppressHydrationWarning>Account</TabsTrigger>
+          <TabsTrigger value="notifications" suppressHydrationWarning>Notifications</TabsTrigger>
+          <TabsTrigger value="security" suppressHydrationWarning>Security</TabsTrigger>
+          <TabsTrigger value="appearance" suppressHydrationWarning>Appearance</TabsTrigger>
+          <TabsTrigger value="system" suppressHydrationWarning>System</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="general" className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-2">
-            <Card>
+        <TabsContent value="general" className="space-y-6" suppressHydrationWarning>
+          <div className="grid gap-6 md:grid-cols-2" suppressHydrationWarning>
+            <Card suppressHydrationWarning>
               <CardHeader>
                 <CardTitle className="flex items-center">
                   <Building className="mr-2 h-5 w-5" />
@@ -309,12 +315,13 @@ export default function SettingsPage() {
                     id="companyName" 
                     value={general.companyName}
                     onChange={(e) => setGeneral({...general, companyName: e.target.value})}
+                    suppressHydrationWarning
                   />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="timezone">Timezone</Label>
                   <Select value={general.timezone} onValueChange={(value: string) => setGeneral({...general, timezone: value})}>
-                    <SelectTrigger>
+                    <SelectTrigger suppressHydrationWarning>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -329,7 +336,7 @@ export default function SettingsPage() {
                 <div className="space-y-2">
                   <Label htmlFor="dateFormat">Date Format</Label>
                   <Select value={general.dateFormat} onValueChange={(value) => setGeneral({...general, dateFormat: value})}>
-                    <SelectTrigger>
+                    <SelectTrigger suppressHydrationWarning>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -342,7 +349,7 @@ export default function SettingsPage() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card suppressHydrationWarning>
               <CardHeader>
                 <CardTitle className="flex items-center">
                   <Globe className="mr-2 h-5 w-5" />
@@ -356,7 +363,7 @@ export default function SettingsPage() {
                 <div className="space-y-2">
                   <Label htmlFor="currency">Default Currency</Label>
                   <Select value={general.currency} onValueChange={(value) => setGeneral({...general, currency: value})}>
-                    <SelectTrigger>
+                    <SelectTrigger suppressHydrationWarning>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -371,7 +378,7 @@ export default function SettingsPage() {
                 <div className="space-y-2">
                   <Label htmlFor="language">Language</Label>
                   <Select value={general.language} onValueChange={(value) => setGeneral({...general, language: value})}>
-                    <SelectTrigger>
+                    <SelectTrigger suppressHydrationWarning>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -387,8 +394,8 @@ export default function SettingsPage() {
           </div>
         </TabsContent>
 
-        <TabsContent value="account" className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-2">
+        <TabsContent value="account" className="space-y-6" suppressHydrationWarning>
+          <div className="grid gap-6 md:grid-cols-2" suppressHydrationWarning>
             <UserProfileSettings />
 
             <Card>
@@ -404,23 +411,23 @@ export default function SettingsPage() {
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="currentPassword">Current Password</Label>
-                  <Input id="currentPassword" type="password" />
+                  <Input id="currentPassword" type="password" suppressHydrationWarning />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="newPassword">New Password</Label>
-                  <Input id="newPassword" type="password" />
+                  <Input id="newPassword" type="password" suppressHydrationWarning />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="confirmPassword">Confirm New Password</Label>
-                  <Input id="confirmPassword" type="password" />
+                  <Input id="confirmPassword" type="password" suppressHydrationWarning />
                 </div>
-                <Button className="w-full">Update Password</Button>
+                <Button className="w-full" suppressHydrationWarning>Update Password</Button>
               </CardContent>
             </Card>
           </div>
         </TabsContent>
 
-        <TabsContent value="notifications" className="space-y-6">
+        <TabsContent value="notifications" className="space-y-6" suppressHydrationWarning>
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center">
@@ -446,6 +453,7 @@ export default function SettingsPage() {
                   id="email-notifications"
                   checked={notifications.email}
                   onCheckedChange={(checked) => setNotifications({...notifications, email: checked})}
+                  suppressHydrationWarning
                 />
               </div>
 
@@ -463,6 +471,7 @@ export default function SettingsPage() {
                   id="push-notifications"
                   checked={notifications.push}
                   onCheckedChange={(checked) => setNotifications({...notifications, push: checked})}
+                  suppressHydrationWarning
                 />
               </div>
 
@@ -480,6 +489,7 @@ export default function SettingsPage() {
                   id="desktop-notifications"
                   checked={notifications.desktop}
                   onCheckedChange={(checked) => setNotifications({...notifications, desktop: checked})}
+                  suppressHydrationWarning
                 />
               </div>
 
@@ -497,14 +507,15 @@ export default function SettingsPage() {
                   id="sms-notifications"
                   checked={notifications.sms}
                   onCheckedChange={(checked) => setNotifications({...notifications, sms: checked})}
+                  suppressHydrationWarning
                 />
               </div>
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="security" className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-2">
+        <TabsContent value="security" className="space-y-6" suppressHydrationWarning>
+          <div className="grid gap-6 md:grid-cols-2" suppressHydrationWarning>
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
@@ -527,6 +538,7 @@ export default function SettingsPage() {
                     id="two-factor"
                     checked={security.twoFactor}
                     onCheckedChange={(checked) => setSecurity({...security, twoFactor: checked})}
+                    suppressHydrationWarning
                   />
                 </div>
 
@@ -537,6 +549,7 @@ export default function SettingsPage() {
                     type="number"
                     value={security.sessionTimeout}
                     onChange={(e) => setSecurity({...security, sessionTimeout: e.target.value})}
+                    suppressHydrationWarning
                   />
                 </div>
 
@@ -547,6 +560,7 @@ export default function SettingsPage() {
                     type="number"
                     value={security.passwordExpiry}
                     onChange={(e) => setSecurity({...security, passwordExpiry: e.target.value})}
+                    suppressHydrationWarning
                   />
                 </div>
 
@@ -557,6 +571,7 @@ export default function SettingsPage() {
                     type="number"
                     value={security.loginAttempts}
                     onChange={(e) => setSecurity({...security, loginAttempts: e.target.value})}
+                    suppressHydrationWarning
                   />
                 </div>
               </CardContent>
@@ -587,13 +602,13 @@ export default function SettingsPage() {
                       <p className="text-sm font-medium">Mobile Session</p>
                       <p className="text-xs text-muted-foreground">Safari on iPhone • 2 hours ago</p>
                     </div>
-                    <Button variant="outline" size="sm">
+                    <Button variant="outline" size="sm" suppressHydrationWarning>
                       <X className="h-3 w-3" />
                     </Button>
                   </div>
                 </div>
                 
-                <Button variant="destructive" className="w-full">
+                <Button variant="destructive" className="w-full" suppressHydrationWarning>
                   Sign Out All Devices
                 </Button>
               </CardContent>
@@ -601,7 +616,7 @@ export default function SettingsPage() {
           </div>
         </TabsContent>
 
-        <TabsContent value="appearance" className="space-y-6">
+        <TabsContent value="appearance" className="space-y-6" suppressHydrationWarning>
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center">
@@ -616,7 +631,7 @@ export default function SettingsPage() {
               <div className="space-y-2">
                 <Label htmlFor="theme">Theme</Label>
                 <Select value={appearance.theme} onValueChange={(value) => setAppearance({...appearance, theme: value})}>
-                  <SelectTrigger>
+                  <SelectTrigger suppressHydrationWarning>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -630,7 +645,7 @@ export default function SettingsPage() {
               <div className="space-y-2">
                 <Label htmlFor="density">Interface Density</Label>
                 <Select value={appearance.density} onValueChange={(value) => setAppearance({...appearance, density: value})}>
-                  <SelectTrigger>
+                  <SelectTrigger suppressHydrationWarning>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -644,7 +659,7 @@ export default function SettingsPage() {
               <div className="space-y-2">
                 <Label htmlFor="sidebar">Sidebar Default</Label>
                 <Select value={appearance.sidebar} onValueChange={(value) => setAppearance({...appearance, sidebar: value})}>
-                  <SelectTrigger>
+                  <SelectTrigger suppressHydrationWarning>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -658,8 +673,8 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="system" className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-2">
+        <TabsContent value="system" className="space-y-6" suppressHydrationWarning>
+          <div className="grid gap-6 md:grid-cols-2" suppressHydrationWarning>
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
@@ -711,11 +726,11 @@ export default function SettingsPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <Button variant="outline" className="w-full">
+                <Button variant="outline" className="w-full" suppressHydrationWarning>
                   <RefreshCw className="mr-2 h-4 w-4" />
                   Check for Updates
                 </Button>
-                <Button variant="outline" className="w-full">
+                <Button variant="outline" className="w-full" suppressHydrationWarning>
                   <Database className="mr-2 h-4 w-4" />
                   Backup Database
                 </Button>
@@ -724,6 +739,7 @@ export default function SettingsPage() {
                   className="w-full"
                   onClick={handleExportData}
                   disabled={isExporting}
+                  suppressHydrationWarning
                 >
                   {isExporting ? (
                     <>
@@ -737,7 +753,7 @@ export default function SettingsPage() {
                     </>
                   )}
                 </Button>
-                <Button variant="outline" className="w-full">
+                <Button variant="outline" className="w-full" suppressHydrationWarning>
                   <Settings className="mr-2 h-4 w-4" />
                   Clear Cache
                 </Button>
@@ -761,6 +777,7 @@ export default function SettingsPage() {
                   variant="outline" 
                   className="w-full justify-start"
                   onClick={() => openResetDialog('settings')}
+                  suppressHydrationWarning
                 >
                   <Settings className="mr-2 h-4 w-4" />
                   Reset Settings Only
@@ -769,6 +786,7 @@ export default function SettingsPage() {
                   variant="outline" 
                   className="w-full justify-start"
                   onClick={() => openResetDialog('warehouse')}
+                  suppressHydrationWarning
                 >
                   <HardDrive className="mr-2 h-4 w-4" />
                   Reset Warehouse Stock
@@ -777,6 +795,7 @@ export default function SettingsPage() {
                   variant="outline" 
                   className="w-full justify-start"
                   onClick={() => openResetDialog('database')}
+                  suppressHydrationWarning
                 >
                   <Archive className="mr-2 h-4 w-4" />
                   Reset Transaction Data
@@ -785,6 +804,7 @@ export default function SettingsPage() {
                   variant="outline" 
                   className="w-full justify-start"
                   onClick={() => openResetDialog('products')}
+                  suppressHydrationWarning
                 >
                   <Trash2 className="mr-2 h-4 w-4" />
                   Reset Products & Catalog
@@ -793,6 +813,7 @@ export default function SettingsPage() {
                   variant="outline" 
                   className="w-full justify-start"
                   onClick={() => openResetDialog('packaging')}
+                  suppressHydrationWarning
                 >
                   <Archive className="mr-2 h-4 w-4" />
                   Reset Packaging Data
@@ -801,6 +822,7 @@ export default function SettingsPage() {
                   variant="outline" 
                   className="w-full justify-start"
                   onClick={() => openResetDialog('accounts')}
+                  suppressHydrationWarning
                 >
                   <Database className="mr-2 h-4 w-4" />
                   Reset Journal Entries
@@ -827,6 +849,7 @@ export default function SettingsPage() {
                     className="w-full justify-start"
                     onClick={handleInitializeAccounts}
                     disabled={isInitializingAccounts}
+                    suppressHydrationWarning
                   >
                     {isInitializingAccounts ? (
                       <>
@@ -864,6 +887,7 @@ export default function SettingsPage() {
                     variant="destructive" 
                     className="w-full"
                     onClick={() => openResetDialog('fullReset')}
+                    suppressHydrationWarning
                   >
                     <AlertTriangle className="mr-2 h-4 w-4" />
                     Factory Reset System
@@ -895,6 +919,7 @@ export default function SettingsPage() {
                   onClick={handleFixPurchaseStatuses}
                   disabled={fixingStatuses}
                   variant="outline"
+                  suppressHydrationWarning
                 >
                   {fixingStatuses ? (
                     <>

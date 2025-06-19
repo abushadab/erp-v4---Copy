@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { motion } from 'framer-motion'
 import { Search, Filter, Plus, Eye, FileText, Calendar, Truck, CheckCircle, Clock, RotateCcw, Package, Box, X, ArrowUpDown, ChevronDown, ChevronRight, DollarSign, CreditCard, CalendarIcon } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -32,6 +31,16 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { getPurchases, getPurchaseStats, getPurchaseReturns, type PurchaseWithItems, type PurchaseReturn } from "@/lib/supabase/purchases"
 import { toast } from "sonner"
 
+// Global cache and request deduplication for purchases page
+let purchasesPageCache: {
+  data: any
+  timestamp: number
+} | null = null
+
+let purchasesPageLoadingPromise: Promise<any> | null = null
+
+const CACHE_DURATION = 30000 // 30 seconds
+
 // Enhanced purchase type with returns
 interface PurchaseWithReturns extends PurchaseWithItems {
   returns?: PurchaseReturn[]
@@ -54,28 +63,118 @@ export default function PurchasesPage() {
   const [pendingDateFilter, setPendingDateFilter] = React.useState('all')
   const [pendingCustomDateRange, setPendingCustomDateRange] = React.useState<DateRange | undefined>(undefined)
   const [isDatePickerOpen, setIsDatePickerOpen] = React.useState(false)
-  const [purchases, setPurchases] = React.useState<PurchaseWithReturns[]>([])
+  // Initialize data state with cached data if available
+  const [purchases, setPurchases] = React.useState<PurchaseWithReturns[]>(() => {
+    const hasValidCache = purchasesPageCache && Date.now() - purchasesPageCache.timestamp < CACHE_DURATION
+    if (hasValidCache && purchasesPageCache) {
+      console.log('🚀 Initializing with cached purchases data')
+      return purchasesPageCache.data.enhancedPurchases
+    }
+    return []
+  })
   const [filteredPurchases, setFilteredPurchases] = React.useState<PurchaseWithReturns[]>([])
-  const [isLoading, setIsLoading] = React.useState(true)
+  // Initialize loading state based on cache availability
+  const [isLoading, setIsLoading] = React.useState(() => {
+    // If we have valid cached data, start with loading false
+    const hasValidCache = purchasesPageCache && Date.now() - purchasesPageCache.timestamp < CACHE_DURATION
+    const initialLoading = !hasValidCache
+    console.log('🏁 Initial loading state:', { initialLoading, hasValidCache })
+    return initialLoading
+  })
+  
+  // Track loading state changes with logging
+  const setIsLoadingWithLog = React.useCallback((loading: boolean) => {
+    console.log(`🔄 setIsLoading(${loading})`, { 
+      from: isLoading, 
+      to: loading,
+      timestamp: new Date().toISOString().split('T')[1]
+    })
+    setIsLoading(loading)
+  }, [isLoading])
   const [expandedRows, setExpandedRows] = React.useState<Set<string>>(new Set())
   const [sortField, setSortField] = React.useState<'purchase_date' | 'total_amount' | 'supplier_name'>('purchase_date')
   const [sortDirection, setSortDirection] = React.useState<'asc' | 'desc'>('desc')
-  const [stats, setStats] = React.useState({
-    totalPurchases: 0,
-    totalAmount: 0,
-    pendingPurchases: 0,
-    receivedPurchases: 0,
-    partiallyReceivedPurchases: 0,
-    cancelledPurchases: 0,
-    totalReturns: 0,
-    totalReturnAmount: 0
+  const [stats, setStats] = React.useState(() => {
+    const hasValidCache = purchasesPageCache && Date.now() - purchasesPageCache.timestamp < CACHE_DURATION
+    if (hasValidCache && purchasesPageCache) {
+      console.log('🚀 Initializing with cached stats data')
+      return purchasesPageCache.data.enhancedStats
+    }
+    return {
+      totalPurchases: 0,
+      totalAmount: 0,
+      pendingPurchases: 0,
+      receivedPurchases: 0,
+      partiallyReceivedPurchases: 0,
+      cancelledPurchases: 0,
+      totalReturns: 0,
+      totalReturnAmount: 0
+    }
   })
 
-  // Load purchases and returns from Supabase
-  React.useEffect(() => {
-    const loadData = async () => {
+  // Track component mount to prevent double execution
+  const mountedRef = React.useRef(false)
+  const loadingStateRef = React.useRef(false)
+
+  // Global function to load purchases data with deduplication
+  const loadPurchasesData = React.useCallback(async () => {
+    console.log('🚀 loadPurchasesData called', {
+      mounted: mountedRef.current,
+      currentlyLoading: loadingStateRef.current,
+      hasCache: !!purchasesPageCache,
+      cacheValid: purchasesPageCache ? Date.now() - purchasesPageCache.timestamp < CACHE_DURATION : false,
+      hasLoadingPromise: !!purchasesPageLoadingPromise
+    })
+
+    // Prevent loading if already in progress
+    if (loadingStateRef.current) {
+      console.log('⚠️ Already loading, skipping...')
+      return
+    }
+
+    // Check if we have valid cached data
+    if (purchasesPageCache && Date.now() - purchasesPageCache.timestamp < CACHE_DURATION) {
+      console.log('📦 Using cached purchases data')
+      const { enhancedPurchases, enhancedStats } = purchasesPageCache.data
+      setPurchases(enhancedPurchases)
+      setStats(enhancedStats)
+      
+      // Only set loading to false if it's currently true (prevent unnecessary state changes)
+      if (isLoading) {
+        setIsLoadingWithLog(false)
+      } else {
+        console.log('🔄 Loading already false, skipping setIsLoading call')
+      }
+      return
+    }
+
+    // Check if there's already a loading request in progress
+    if (purchasesPageLoadingPromise) {
+      console.log('⏳ Purchases data already loading, waiting for result...')
+      setIsLoadingWithLog(true)
+      loadingStateRef.current = true
       try {
-        setIsLoading(true)
+        const result = await purchasesPageLoadingPromise
+        setPurchases(result.enhancedPurchases)
+        setStats(result.enhancedStats)
+        console.log('✅ Got result from existing promise')
+      } catch (error) {
+        console.error('❌ Error from existing loading promise:', error)
+              } finally {
+          setIsLoadingWithLog(false)
+          loadingStateRef.current = false
+        }
+      return
+    }
+
+    // Start new loading request
+    console.log('🔄 Loading fresh purchases data...')
+    setIsLoadingWithLog(true)
+    loadingStateRef.current = true
+
+    // Create loading promise with timeout protection
+    purchasesPageLoadingPromise = Promise.race([
+      (async () => {
         const [purchasesData, statsData, returnsData] = await Promise.all([
           getPurchases(),
           getPurchaseStats(),
@@ -102,27 +201,88 @@ export default function PurchasesPage() {
           }
         })
         
-        setPurchases(enhancedPurchases)
-        
         // Enhanced stats with return information
         const totalReturns = returnsData.length
         const totalReturnAmount = returnsData.reduce((sum, ret) => sum + ret.total_amount, 0)
         
-        setStats({
+        const enhancedStats = {
           ...statsData,
           totalReturns,
           totalReturnAmount
-        })
-      } catch (error) {
-        console.error('Error loading data:', error)
-        toast.error('Failed to load purchases')
-      } finally {
-        setIsLoading(false)
-      }
-    }
+        }
 
-    loadData()
+        return { enhancedPurchases, enhancedStats }
+      })(),
+      new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Request timeout')), 10000)
+      )
+    ])
+
+    try {
+      const result = await purchasesPageLoadingPromise
+      
+      // Cache the result
+      purchasesPageCache = {
+        data: result,
+        timestamp: Date.now()
+      }
+      
+      setPurchases(result.enhancedPurchases)
+      setStats(result.enhancedStats)
+      console.log('✅ Purchases data loaded and cached successfully')
+    } catch (error) {
+      console.error('❌ Error loading purchases data:', error)
+      toast.error('Failed to load purchases')
+      
+      // Fallback to empty data
+      setPurchases([])
+      setStats({
+        totalPurchases: 0,
+        totalAmount: 0,
+        pendingPurchases: 0,
+        receivedPurchases: 0,
+        partiallyReceivedPurchases: 0,
+        cancelledPurchases: 0,
+        totalReturns: 0,
+        totalReturnAmount: 0
+      })
+    } finally {
+      // Always cleanup the loading promise and state
+      purchasesPageLoadingPromise = null
+      setIsLoadingWithLog(false)
+      loadingStateRef.current = false
+      console.log('🏁 Loading completed, cleanup done')
+    }
   }, [])
+
+  // Load data on component mount with strict mode protection
+  React.useEffect(() => {
+    console.log('📍 useEffect triggered', { 
+      mounted: mountedRef.current,
+      isLoading: isLoading,
+      hasCache: !!purchasesPageCache,
+      strictMode: !mountedRef.current ? 'FIRST_MOUNT' : 'STRICT_MODE_SECOND_MOUNT'
+    })
+    
+    // Prevent double execution in React Strict Mode
+    if (mountedRef.current) {
+      console.log('⚠️ Strict Mode second mount detected, skipping...')
+      return
+    }
+    
+    mountedRef.current = true
+    
+    // If we already have valid cached data, no need to load
+    if (purchasesPageCache && Date.now() - purchasesPageCache.timestamp < CACHE_DURATION) {
+      console.log('⚡ Valid cache available, skipping data load')
+      return
+    }
+    
+    console.log('🎯 First mount - triggering data load')
+    loadPurchasesData()
+  }, []) // Remove loadPurchasesData dependency to prevent re-execution
+
+
 
   // Helper functions for date presets
   const setDatePreset = (preset: string) => {
@@ -354,14 +514,19 @@ export default function PurchasesPage() {
   if (isLoading) {
     return (
       <div className="container mx-auto px-6 py-8">
-        {/* Header Skeleton */}
+        {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
           <div>
-            <Skeleton className="h-8 w-48 mb-2" />
-            <Skeleton className="h-4 w-72" />
-        </div>
+            <h1 className="text-3xl font-bold tracking-tight">Purchases</h1>
+            <p className="text-muted-foreground mt-2">
+              Manage purchase orders and returns for products and packages
+            </p>
+          </div>
           <div className="mt-4 sm:mt-0">
-            <Skeleton className="h-10 w-40" />
+            <Button className="w-full sm:w-auto cursor-pointer" disabled>
+              <Plus className="mr-2 h-4 w-4" />
+              Create Purchase
+            </Button>
           </div>
         </div>
 
@@ -492,30 +657,25 @@ export default function PurchasesPage() {
   return (
     <div className="container mx-auto px-6 py-8">
       {/* Header */}
-      <motion.div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Purchases</h1>
           <p className="text-muted-foreground mt-2">
             Manage purchase orders and returns for products and packages
           </p>
         </div>
-        <motion.div className="mt-4 sm:mt-0">
+        <div className="mt-4 sm:mt-0">
           <Link href="/purchases/add">
             <Button className="w-full sm:w-auto cursor-pointer">
               <Plus className="mr-2 h-4 w-4" />
               Create Purchase
             </Button>
           </Link>
-        </motion.div>
-      </motion.div>
+        </div>
+      </div>
 
       {/* Enhanced Stats Cards */}
-      <motion.div 
-        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6 mb-8"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.6, delay: 0.2 }}
-        >
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6 mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Orders</CardTitle>
@@ -581,15 +741,10 @@ export default function PurchasesPage() {
               <p className="text-xs text-muted-foreground">Cancelled orders</p>
             </CardContent>
           </Card>
-      </motion.div>
+      </div>
 
       {/* Enhanced Filters */}
-      <motion.div 
-        className="flex flex-col md:flex-row gap-4 mb-6"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.6, delay: 0.2 }}
-      >
+      <div className="flex flex-col md:flex-row gap-4 mb-6">
         {/* Search */}
         <div className="space-y-2 flex-1">
           <Label htmlFor="search">Search</Label>
@@ -755,7 +910,7 @@ export default function PurchasesPage() {
                         row: "flex w-full mt-2",
                         cell: "h-9 w-9 text-center text-sm p-0 relative flex-1",
                         day: "h-9 w-9 p-0 font-normal hover:bg-gray-100 rounded mx-auto cursor-pointer",
-                        day_selected: "bg-gray-100 text-black hover:bg-gray-300 hover:text-black focus:bg-gray-300 focus:text-black",
+                        day_selected: "bg-gray-100 text-black hover:bg-gray-300 hover:text-black",
                         day_today: "bg-gray-300 text-gray-900",
                         day_outside: "text-black",
                         day_disabled: "text-gray-400",
@@ -859,26 +1014,17 @@ export default function PurchasesPage() {
             Reset All
           </Button>
         </div>
-      </motion.div>
+      </div>
 
       {/* Purchase Count */}
-      <motion.div 
-        className="mb-4"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.6, delay: 0.2 }}
-      >
+      <div className="mb-4">
         <p className="text-sm text-muted-foreground">
           {filteredPurchases.length} of {stats.totalPurchases} purchases
         </p>
-      </motion.div>
+      </div>
 
       {/* Purchases Table */}
-      <motion.div 
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.6, delay: 0.2 }}
-      >
+      <div>
         <Card className="shadow-sm">
           <CardContent className="p-0">
             {filteredPurchases.length > 0 ? (
@@ -1069,7 +1215,7 @@ export default function PurchasesPage() {
             )}
           </CardContent>
         </Card>
-      </motion.div>
+      </div>
     </div>
   )
 } 
