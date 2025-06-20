@@ -35,56 +35,16 @@ import {
 import { getWarehouses, getProductsByWarehouse, type DatabaseWarehouse } from "@/lib/supabase/queries"
 import { createWarehouse, deleteWarehouse, activateWarehouse, type CreateWarehouseData } from "@/lib/supabase/mutations"
 
-// Global cache and request deduplication for warehouses
-let warehousesCache: {
-  data?: DatabaseWarehouse[]
-  lastFetch?: number
-  isLoading?: boolean
-  loadingPromise?: Promise<DatabaseWarehouse[]>
-} = {}
-
-const CACHE_DURATION = 30 * 1000 // 30 seconds
-
-// Request deduplication: ensure only one API call at a time
-const getWarehousesData = async () => {
-  const now = Date.now()
-  
-  // Return cached data if valid
-  if (warehousesCache.data && warehousesCache.lastFetch && (now - warehousesCache.lastFetch) < CACHE_DURATION) {
-    console.log('📋 Using cached warehouses data')
-    return warehousesCache.data
+// Expose cache clearing globally for debugging - now uses global API cache
+if (typeof window !== 'undefined') {
+  (window as any).clearWarehousesCache = () => {
+    // Use the global API cache invalidation instead
+    if ((window as any).debugApiCache) {
+      (window as any).debugApiCache.invalidate('warehouses-list')
+      console.log('🗑️ Warehouses cache cleared via global cache')
+    }
   }
-  
-  // If already loading, return the existing promise
-  if (warehousesCache.isLoading && warehousesCache.loadingPromise) {
-    console.log('⏳ Warehouses data already loading, waiting for existing request...')
-    return warehousesCache.loadingPromise
-  }
-  
-  // Start fresh loading
-  warehousesCache.isLoading = true
-  warehousesCache.loadingPromise = getWarehouses().then((data) => {
-    // Cache the result
-    warehousesCache.data = data
-    warehousesCache.lastFetch = now
-    warehousesCache.isLoading = false
-    warehousesCache.loadingPromise = undefined
-    
-    console.log('✅ Warehouses data loaded and cached')
-    return data
-  }).catch((error: Error | unknown) => {
-    warehousesCache.isLoading = false
-    warehousesCache.loadingPromise = undefined
-    throw error
-  })
-  
-  return warehousesCache.loadingPromise
-}
-
-// Clear cache function
-const clearWarehousesCache = () => {
-  warehousesCache = {}
-  console.log('🗑️ Warehouses cache cleared')
+  console.log('🔧 Warehouses cache clearing available at window.clearWarehousesCache()')
 }
 
 export default function WarehousesPage() {
@@ -130,7 +90,7 @@ export default function WarehousesPage() {
     try {
       loadingRef.current = true
       setLoading(true)
-      const data = await getWarehousesData()
+      const data = await getWarehouses()
       setWarehouses(data)
       dataLoadedRef.current = true
     } catch (error) {
@@ -184,7 +144,9 @@ export default function WarehousesPage() {
       })
       
       // Clear cache and reload warehouses
-      clearWarehousesCache()
+      if (typeof window !== 'undefined' && (window as any).debugApiCache) {
+        (window as any).debugApiCache.invalidate('warehouses-list')
+      }
       dataLoadedRef.current = false // Reset to allow fresh load
       await loadWarehouses()
     } catch (error) {
@@ -200,7 +162,9 @@ export default function WarehousesPage() {
       setIsDeleting(warehouseId)
       await deleteWarehouse(warehouseId)
       toast.success('Warehouse deleted successfully')
-      clearWarehousesCache()
+      if (typeof window !== 'undefined' && (window as any).debugApiCache) {
+        (window as any).debugApiCache.invalidate('warehouses-list')
+      }
       dataLoadedRef.current = false // Reset to allow fresh load
       await loadWarehouses()
     } catch (error: any) {
@@ -217,7 +181,9 @@ export default function WarehousesPage() {
       setIsActivating(warehouseId)
       await activateWarehouse(warehouseId)
       toast.success('Warehouse activated successfully')
-      clearWarehousesCache()
+      if (typeof window !== 'undefined' && (window as any).debugApiCache) {
+        (window as any).debugApiCache.invalidate('warehouses-list')
+      }
       dataLoadedRef.current = false // Reset to allow fresh load
       await loadWarehouses()
     } catch (error: any) {

@@ -22,15 +22,15 @@ export function UserProfile() {
   const [isSigningOut, setIsSigningOut] = useState(false)
   
   // Debug logging for user data changes
-  React.useEffect(() => {
-    console.log('👤 UserProfile component - user data changed:', {
-      name: user?.name,
-      email: user?.email,
-      department: user?.department,
-      loading,
-      error
-    })
-  }, [user, loading, error])
+  // React.useEffect(() => {
+  //   console.log('👤 UserProfile component - user data changed:', {
+  //     name: user?.name,
+  //     email: user?.email,
+  //     department: user?.department,
+  //     loading,
+  //     error
+  //   })
+  // }, [user, loading, error])
 
   const handleSignOut = async () => {
     setIsSigningOut(true)
@@ -71,12 +71,8 @@ export function UserProfile() {
   // Loading state
   if (loading) {
     return (
-      <div className="flex items-center space-x-3 h-11" style={{ width: '170px' }}>
-        <div className="h-8 w-8 rounded-full animate-pulse" style={{ backgroundColor: '#e2e8f0' }}></div>
-        <div className="space-y-1">
-          <div className="h-4 w-24 rounded animate-pulse" style={{ backgroundColor: '#e2e8f0' }}></div>
-          <div className="h-3 w-16 rounded animate-pulse" style={{ backgroundColor: '#e2e8f0' }}></div>
-        </div>
+      <div className="flex items-center justify-center h-9 w-9 rounded-md">
+        <div className="h-6 w-6 rounded-full animate-pulse" style={{ backgroundColor: '#e2e8f0' }}></div>
       </div>
     )
   }
@@ -84,14 +80,9 @@ export function UserProfile() {
   // Error state
   if (error || !user) {
     return (
-      <div className="flex items-center space-x-3">
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
-          <User className="h-4 w-4" />
-        </div>
-        <div className="text-left">
-          <div className="text-sm font-medium text-muted-foreground">
-            {error ? 'Error loading profile' : 'Not signed in'}
-          </div>
+      <div className="flex items-center justify-center h-9 w-9 rounded-md">
+        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-muted">
+          <User className="h-3 w-3" />
         </div>
       </div>
     )
@@ -102,28 +93,22 @@ export function UserProfile() {
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <div 
-            className="flex items-center justify-start cursor-pointer h-11 rounded-md transition-colors focus:outline-none"
+            className="flex items-center justify-center cursor-pointer h-9 w-9 rounded-md transition-colors focus:outline-none hover:bg-muted"
             role="button"
             tabIndex={0}
           >
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground mr-3">
+            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground">
               {user.avatar_url ? (
                 <img 
                   src={user.avatar_url} 
                   alt={user.name}
-                  className="h-8 w-8 rounded-full object-cover"
+                  className="h-6 w-6 rounded-full object-cover"
                 />
               ) : (
                 <span className="text-xs font-medium">
                   {getInitials(user.name)}
                 </span>
               )}
-            </div>
-            <div className="text-left">
-              <div className="text-sm font-medium truncate">{user.name}</div>
-              <div className="text-xs text-muted-foreground">
-                {getPrimaryRole()}
-              </div>
             </div>
           </div>
         </DropdownMenuTrigger>

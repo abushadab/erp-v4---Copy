@@ -38,20 +38,20 @@ const MAX_RETRIES = 2;
  * Get a specific user with their roles and permissions (with caching and production optimizations)
  */
 export async function getUserWithPermissions(userId: string): Promise<ExtendedUser | null> {
-  console.log('🔍 getUserWithPermissions called for userId:', userId);
+  // console.log('🔍 getUserWithPermissions called for userId:', userId);
   
   const now = Date.now();
   const cached = userPermissionsCache.get(userId);
   
   // Return cached data if it's fresh
   if (cached && (now - cached.timestamp) < CACHE_DURATION) {
-    console.log('📦 Using cached user permissions data for:', userId);
+    // console.log('📦 Using cached user permissions data for:', userId);
     return cached.data;
   }
   
   // If there's already a request in progress, wait for it with timeout protection
   if (cached?.promise) {
-    console.log('⏳ Request already in progress for user:', userId, '- waiting for existing promise...');
+    // console.log('⏳ Request already in progress for user:', userId, '- waiting for existing promise...');
     try {
       // Shorter timeout for production
       const timeoutPromise = new Promise<ExtendedUser | null>((_, reject) => 
@@ -81,7 +81,7 @@ export async function getUserWithPermissions(userId: string): Promise<ExtendedUs
       }, PRODUCTION_TIMEOUT);
 
       try {
-        console.log(`🔄 Fetching fresh user permissions data from API for: ${userId} (attempt ${attempt}/${MAX_RETRIES})`);
+        // console.log(`🔄 Fetching fresh user permissions data from API for: ${userId} (attempt ${attempt}/${MAX_RETRIES})`);
         
         const supabase = createClient();
         
@@ -117,12 +117,12 @@ export async function getUserWithPermissions(userId: string): Promise<ExtendedUs
         }
         
         const result = data?.[0] || null;
-        console.log('📦 Fresh user data received:', { 
-          id: result?.id, 
-          name: result?.name, 
-          email: result?.email,
-          department: result?.department 
-        });
+        // console.log('📦 Fresh user data received:', { 
+        //   id: result?.id, 
+        //   name: result?.name, 
+        //   email: result?.email,
+        //   department: result?.department 
+        // });
         
         // Update cache with result
         userPermissionsCache.set(userId, {
@@ -131,7 +131,7 @@ export async function getUserWithPermissions(userId: string): Promise<ExtendedUs
           promise: undefined
         });
         
-        console.log(`✅ User permissions data fetched and cached for: ${userId} (attempt ${attempt})`);
+        // console.log(`✅ User permissions data fetched and cached for: ${userId} (attempt ${attempt})`);
         return result;
         
       } catch (error) {

@@ -35,7 +35,9 @@ import {
   Receipt,
   Shield,
   FileText,
-  Activity
+  Activity,
+  PanelLeft,
+  PanelLeftClose
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -184,7 +186,7 @@ export function Sidebar({ children }: SidebarProps) {
 
   // First useEffect to set mounted state
   React.useEffect(() => {
-    console.log('🚀 Sidebar mounting, setting mounted to true')
+    // console.log('🚀 Sidebar mounting, setting mounted to true')
     setMounted(true)
   }, [])
 
@@ -309,16 +311,16 @@ export function Sidebar({ children }: SidebarProps) {
         {/* Main Content Skeleton */}
         <div className="flex-1 flex flex-col">
           {/* Top Bar Skeleton */}
-          <header className="px-6 py-4 lg:px-8" style={{ backgroundColor: '#f4f8f9', minHeight: '76px' }} suppressHydrationWarning>
+          <header className="px-4 sm:px-6 py-4 lg:px-8" style={{ backgroundColor: '#f4f8f9', minHeight: '76px' }} suppressHydrationWarning>
             <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <div className="h-5 w-5 rounded-md animate-pulse lg:hidden" style={{ backgroundColor: '#e2e8f0' }}></div>
-                <div className="h-9 w-64 lg:w-96 rounded-md animate-pulse" style={{ backgroundColor: '#e2e8f0' }}></div>
+              <div className="flex items-center space-x-3 sm:space-x-4 flex-1 mr-4">
+                <div className="h-9 w-9 rounded-md animate-pulse lg:hidden" style={{ backgroundColor: '#d4dfe1' }}></div>
+                <div className="h-9 flex-1 max-w-sm sm:max-w-md lg:max-w-lg rounded-md animate-pulse" style={{ backgroundColor: '#e2e8f0' }}></div>
               </div>
               
-              <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-3">
                 {/* Notifications Skeleton */}
-                <div className="h-9 w-9 rounded-md animate-pulse" style={{ backgroundColor: '#e2e8f0' }}></div>
+                <div className="h-9 w-9 rounded-md animate-pulse" style={{ backgroundColor: '#d4dfe1' }}></div>
                 
                 {/* User Profile Skeleton */}
                 <UserProfile />
@@ -368,10 +370,11 @@ export function Sidebar({ children }: SidebarProps) {
             <Button
               variant="ghost"
               size="sm"
-              className="lg:hidden"
+              className="lg:hidden p-2"
               onClick={() => setSidebarOpen(false)}
+              style={{ backgroundColor: '#d4dfe1' }}
             >
-              <X className="h-4 w-4" />
+              <PanelLeftClose className="h-4 w-4" />
             </Button>
           </div>
 
@@ -497,41 +500,40 @@ export function Sidebar({ children }: SidebarProps) {
       <div className="flex-1 flex flex-col lg:ml-0">
         {/* Top bar */}
         <header 
-          className="sticky top-0 z-40 px-6 py-4 lg:px-8 transition-all duration-200"
+          className="sticky top-0 z-40 px-4 sm:px-6 py-4 lg:px-8 transition-all duration-200"
           style={{ 
             backgroundColor: isSticky ? '#fff' : '#f4f8f9',
             boxShadow: isSticky ? '0 2px 8px #00000005' : 'none'
           }}
         >
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-3 sm:space-x-4 flex-1 mr-4">
               <Button
                 variant="ghost"
                 size="sm"
-                className="lg:hidden"
+                className="lg:hidden p-2"
                 onClick={() => setSidebarOpen(true)}
+                style={{ backgroundColor: '#d4dfe1' }}
               >
-                <Menu className="h-5 w-5" />
+                <PanelLeft className="h-4 w-4" />
               </Button>
 
-              {/* Search - moved to left */}
-              <div className="relative">
+              {/* Search - responsive width */}
+              <div className="relative flex-1 max-w-sm sm:max-w-md lg:max-w-lg">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   placeholder="Search..."
-                  className="pl-10 w-64 lg:w-96 focus:ring-0 focus:ring-offset-0 focus:shadow-none transition-all"
+                  className="pl-10 w-full focus:ring-0 focus:ring-offset-0 focus:shadow-none transition-all"
                 />
               </div>
             </div>
 
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-3">
               {/* Notifications */}
-              <div>
-                <Button variant="ghost" size="sm" className="relative" style={{ backgroundColor: '#d4dfe1' }}>
-                  <Bell className="h-5 w-5" />
-                  <span className="absolute -top-1 -right-1 h-3 w-3 bg-destructive rounded-full text-xs" />
-                </Button>
-              </div>
+              <Button variant="ghost" size="sm" className="relative p-2" style={{ backgroundColor: '#d4dfe1' }}>
+                <Bell className="h-4 w-4" />
+                <span className="absolute -top-1 -right-1 h-3 w-3 bg-destructive rounded-full" />
+              </Button>
 
               {/* User Profile */}
               <UserProfile />

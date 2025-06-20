@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { getSales, type SaleWithItems } from '@/lib/supabase/sales-client'
 
-// Simple in-memory cache for sales data
+// Simple in-memory cache for sales data with ERP-optimized timing
 let salesCache: {
   data: SaleWithItems[] | null
   timestamp: number
@@ -14,14 +14,25 @@ let salesCache: {
   promise: null
 }
 
-const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
+const CACHE_DURATION = 10 * 1000 // Reduced to 10 seconds for ERP real-time needs
 
 // Global cache invalidation function
 export function invalidateSalesCache() {
-  console.log('🔄 Invalidating sales cache')
+  console.log('🔄 Invalidating sales cache for ERP real-time update')
   salesCache.data = null
   salesCache.timestamp = 0
   salesCache.promise = null
+  salesCache.isLoading = false
+}
+
+// Auto-invalidate when page becomes visible (user comes back to tab)
+if (typeof window !== 'undefined') {
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+      console.log('👁️ Page visible - invalidating sales cache for fresh ERP data')
+      invalidateSalesCache()
+    }
+  })
 }
 
 export function useSalesData() {
@@ -43,19 +54,23 @@ export function useSalesData() {
       return
     }
 
-    // If there's already a promise in progress, wait for it
-    if (salesCache.promise) {
+    // If there's already a promise in progress, wait for it with timeout
+    if (salesCache.promise && salesCache.isLoading) {
       console.log('Sales data already being fetched, waiting for existing promise...')
       try {
-        const data = await salesCache.promise
+        // Add timeout to prevent waiting forever for stuck promises
+        const timeoutPromise = new Promise<SaleWithItems[]>((_, reject) => 
+          setTimeout(() => reject(new Error('Sales data loading timeout')), 8000)
+        );
+        const data = await Promise.race([salesCache.promise, timeoutPromise]);
         setSales(data)
         setIsLoading(false)
         return
       } catch (err) {
-        console.error('Error waiting for existing promise:', err)
-        setError(err instanceof Error ? err.message : 'Failed to fetch sales data')
-        setIsLoading(false)
-        return
+        console.warn('⚠️ Sales promise timed out or failed, creating new request');
+        // Clear the stuck promise and continue with new request
+        salesCache.promise = null;
+        salesCache.isLoading = false;
       }
     }
 
@@ -64,14 +79,25 @@ export function useSalesData() {
       setIsLoading(true)
       setError(null)
       
+      // Mark as loading and create timeout
+      salesCache.isLoading = true
+      const timeoutId = setTimeout(() => {
+        console.log('⏰ Sales data loading timeout - clearing cache');
+        salesCache.isLoading = false;
+        salesCache.promise = null;
+      }, 10000); // 10 second timeout
+      
       // Create and store the promise
       salesCache.promise = getSales()
       const data = await salesCache.promise
+      
+      clearTimeout(timeoutId);
       
       // Update cache
       salesCache.data = data
       salesCache.timestamp = now
       salesCache.promise = null
+      salesCache.isLoading = false
       
       setSales(data)
       setIsLoading(false)
@@ -80,6 +106,7 @@ export function useSalesData() {
       console.error('Error fetching sales:', err)
       setError(err instanceof Error ? err.message : 'Failed to fetch sales data')
       salesCache.promise = null
+      salesCache.isLoading = false
       setIsLoading(false)
     }
   }, [])
@@ -103,11 +130,17 @@ export function useSalesData() {
 
   const refetch = React.useCallback(() => {
     // Clear cache and refetch
-    salesCache.data = null
-    salesCache.timestamp = 0
-    salesCache.promise = null
+    invalidateSalesCache()
     fetchSales()
   }, [fetchSales])
+
+  // Expose cache clearing function globally for debugging
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).clearSalesCache = invalidateSalesCache
+      console.log('🔧 Sales cache clearing available at window.clearSalesCache()')
+    }
+  }, [])
 
   return {
     sales,

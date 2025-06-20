@@ -156,7 +156,7 @@ export async function deleteExpenseType(id: string) {
 // Expenses Functions
 export async function getExpenses() {
   const cacheKey = 'expenses_list';
-  console.log('🔍 getExpenses called');
+  // console.log('🔍 getExpenses called');
   
   const now = Date.now();
   const cached = expensesCache.get(cacheKey);
@@ -176,7 +176,7 @@ export async function getExpenses() {
   // Create new request promise
   const requestPromise = (async () => {
     try {
-      console.log('🔄 Fetching fresh expenses data from API');
+      // console.log('🔄 Fetching fresh expenses data from API');
       
       const supabase = createClient()
       const { data, error } = await supabase
@@ -202,7 +202,7 @@ export async function getExpenses() {
         promise: undefined
       });
       
-      console.log('✅ Expenses data fetched and cached');
+        // console.log('✅ Expenses data fetched and cached');
       return result;
     } catch (error) {
       // Remove the promise from cache on error so next call can retry

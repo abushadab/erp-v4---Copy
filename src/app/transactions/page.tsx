@@ -54,6 +54,31 @@ const dataCache = {
 
 const CACHE_DURATION = 30000 // 30 seconds
 
+// Global debugging utility for transactions cache
+if (typeof window !== 'undefined') {
+  (window as any).clearTransactionsCache = () => {
+    dataCache.journalEntries = null
+    dataCache.accounts = null
+    dataCache.lastFetch = 0
+    dataCache.isLoading = false
+    dataCache.currentRequest = null
+    console.log('🧹 Transactions cache cleared')
+  }
+  
+  (window as any).debugTransactionsCache = () => {
+    console.log('🔍 Transactions Cache Debug:', {
+      hasJournalEntries: !!dataCache.journalEntries,
+      entriesCount: dataCache.journalEntries?.length || 0,
+      hasAccounts: !!dataCache.accounts,
+      accountsCount: dataCache.accounts?.length || 0,
+      lastFetch: new Date(dataCache.lastFetch).toISOString(),
+      isLoading: dataCache.isLoading,
+      hasCurrentRequest: !!dataCache.currentRequest,
+      cacheAge: Date.now() - dataCache.lastFetch
+    })
+  }
+}
+
 export default function TransactionsPage() {
   // Ref to track if initial load has been triggered
   const initialLoadTriggered = React.useRef(false)
@@ -79,7 +104,7 @@ export default function TransactionsPage() {
   const [isSubmitting, setIsSubmitting] = React.useState(false)
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = React.useState(false)
   
-  // Data loading function with enhanced request deduplication
+  // Data loading function with enhanced request deduplication and timeout protection
   const loadTransactionsData = async (forceRefresh = false) => {
     const now = Date.now()
     
@@ -97,11 +122,18 @@ export default function TransactionsPage() {
       return
     }
 
-    // If there's already a request in progress, wait for it
+    // If there's already a request in progress, wait for it with timeout
     if (dataCache.currentRequest) {
       console.log('⏳ Request already in progress, waiting for existing promise...')
       try {
-        await dataCache.currentRequest
+        // Wait for existing promise with 8-second timeout
+        await Promise.race([
+          dataCache.currentRequest,
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Timeout waiting for existing request')), 8000)
+          )
+        ])
+        
         // After the request completes, update state with cached data
         if (dataCache.journalEntries && dataCache.accounts) {
           console.log('📦 Using data from completed request')
@@ -110,36 +142,85 @@ export default function TransactionsPage() {
           setLoading(false)
         }
       } catch (error) {
-        console.error('⚠️ Error in concurrent request:', error)
+        console.error('⚠️ Error or timeout in concurrent request:', error)
+        // Clear stuck promise and proceed with fresh request
+        dataCache.currentRequest = null
       }
-      return
+      
+      // If we successfully used cached data, return
+      if (dataCache.journalEntries && dataCache.accounts) {
+        return
+      }
     }
 
-    // Create a new request promise
+    // Create a new request promise with timeout protection
     const requestPromise = (async () => {
       try {
         console.log('🔄 Fetching fresh data from API')
         setLoading(true)
         
-        const [journalEntriesData, accountsData] = await Promise.all([
-          getJournalEntriesWithLines(),
-          getAccountsWithCategories()
-        ])
+        // Create timeout controller
+        const timeoutController = new AbortController()
+        const timeoutId = setTimeout(() => {
+          console.log('⏰ Request timeout after 10 seconds')
+          timeoutController.abort()
+        }, 10000)
         
-        console.log('✅ Data fetched successfully')
-        console.log('📊 Journal entries:', journalEntriesData?.length || 0)
-        console.log('🏦 Accounts:', accountsData?.length || 0)
-        
-        // Update cache
-        dataCache.journalEntries = journalEntriesData
-        dataCache.accounts = accountsData
-        dataCache.lastFetch = now
-        
-        // Update state
-        setJournalEntries(journalEntriesData)
-        setAccounts(accountsData)
+                 try {
+           const [journalEntriesData, accountsData] = await Promise.race([
+             Promise.all([
+               getJournalEntriesWithLines(),
+               getAccountsWithCategories()
+             ]),
+             new Promise<never>((_, reject) => 
+               setTimeout(() => reject(new Error('API request timeout')), 10000)
+             )
+           ]) as [JournalEntryWithLines[], AccountWithCategory[]]
+          
+          clearTimeout(timeoutId)
+          
+          console.log('✅ Data fetched successfully')
+          console.log('📊 Journal entries:', journalEntriesData?.length || 0)
+          console.log('🏦 Accounts:', accountsData?.length || 0)
+          
+          // Update cache
+          dataCache.journalEntries = journalEntriesData
+          dataCache.accounts = accountsData
+          dataCache.lastFetch = now
+          
+          // Update state
+          setJournalEntries(journalEntriesData)
+          setAccounts(accountsData)
+        } catch (apiError) {
+          clearTimeout(timeoutId)
+          console.error('❌ API request failed or timed out:', apiError)
+          
+          // Fallback to cached data if available
+          if (dataCache.journalEntries && dataCache.accounts) {
+            console.log('🔄 Using stale cached data as fallback')
+            setJournalEntries(dataCache.journalEntries)
+            setAccounts(dataCache.accounts)
+          } else {
+            // Set empty data as fallback
+            setJournalEntries([])
+            setAccounts([])
+          }
+          
+          toast.error("Failed to load transactions data. Please try refreshing.")
+        }
       } catch (error) {
         console.error('❌ Error loading transactions data:', error)
+        
+        // Fallback to cached data if available
+        if (dataCache.journalEntries && dataCache.accounts) {
+          console.log('🔄 Using cached data as fallback after error')
+          setJournalEntries(dataCache.journalEntries)
+          setAccounts(dataCache.accounts)
+        } else {
+          setJournalEntries([])
+          setAccounts([])
+        }
+        
         toast.error("Failed to load transactions data. Please try again.")
       } finally {
         console.log('🏁 Request completed, setting loading to false')
@@ -152,8 +233,21 @@ export default function TransactionsPage() {
     // Store the request promise so other calls can wait for it
     dataCache.currentRequest = requestPromise
     
-    // Wait for the request to complete
-    await requestPromise
+    // Wait for the request to complete with overall timeout
+    try {
+      await Promise.race([
+        requestPromise,
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Overall operation timeout')), 12000)
+        )
+      ])
+    } catch (error) {
+      console.error('⚠️ Overall operation timeout or error:', error)
+      // Ensure loading is false and promise is cleared
+      setLoading(false)
+      setRefreshing(false)
+      dataCache.currentRequest = null
+    }
   }
 
   // Load initial data only once
@@ -290,7 +384,7 @@ export default function TransactionsPage() {
           </div>
 
           {/* Table Skeleton */}
-          <div className="border rounded-lg">
+          <div className="border rounded-lg bg-white">
             <div className="border-b bg-muted/50">
               <div className="grid grid-cols-5 gap-4 p-4">
                 <Skeleton className="h-4 w-16" />
@@ -300,9 +394,9 @@ export default function TransactionsPage() {
                 <Skeleton className="h-4 w-12" />
               </div>
             </div>
-            <div className="divide-y">
+            <div className="divide-y bg-white">
               {Array.from({ length: 8 }).map((_, i) => (
-                <div key={i} className="grid grid-cols-5 gap-4 p-4">
+                <div key={i} className="grid grid-cols-5 gap-4 p-4 bg-white">
                   <Skeleton className="h-4 w-20" />
                   <Skeleton className="h-4 w-32" />
                   <Skeleton className="h-4 w-24" />

@@ -25,7 +25,8 @@ import {
   Receipt,
   Building2,
   CalendarDays,
-  Package
+  Package,
+  RefreshCw
 } from "lucide-react"
 
 // Import Supabase query functions
@@ -42,26 +43,45 @@ let globalCache: {
   loadingPromise?: Promise<DashboardStats>
 } = {}
 
-const CACHE_DURATION = 30 * 1000 // 30 seconds
+const CACHE_DURATION = 10 * 1000 // Reduced to 10 seconds for ERP real-time dashboard
 
-// Request deduplication: ensure only one set of API calls at a time
+// Request deduplication: ensure only one set of API calls at a time with timeout protection
 const getDashboardData = async () => {
   const now = Date.now()
   
   // Return cached data if valid
   if (globalCache.data && globalCache.lastFetch && (now - globalCache.lastFetch) < CACHE_DURATION) {
-    console.log('📋 Using cached dashboard data')
+    // console.log('📋 Using cached dashboard data (ERP optimized)')
     return globalCache.data
   }
   
-  // If already loading, return the existing promise
+  // If already loading, wait for existing promise with timeout protection
   if (globalCache.isLoading && globalCache.loadingPromise) {
-    console.log('⏳ Dashboard data already loading, waiting for existing request...')
-    return globalCache.loadingPromise
+    // console.log('⏳ Dashboard data already loading, waiting for existing request...')
+    try {
+      // Add timeout to prevent waiting forever for stuck promises
+      const timeoutPromise = new Promise<DashboardStats>((_, reject) => 
+        setTimeout(() => reject(new Error('Dashboard loading timeout')), 8000)
+      );
+      return await Promise.race([globalCache.loadingPromise, timeoutPromise]);
+    } catch (error) {
+      console.warn('⚠️ Dashboard loading promise timed out or failed, creating new request');
+      // Clear the stuck promise and continue with new request
+      globalCache.isLoading = false;
+      globalCache.loadingPromise = undefined;
+    }
   }
   
-  // Start fresh loading
+  // Start fresh loading with timeout protection
   globalCache.isLoading = true
+  
+  // Create timeout promise for the entire operation
+  const timeoutId = setTimeout(() => {
+    console.log('⏰ Dashboard data loading timeout - clearing cache');
+    globalCache.isLoading = false;
+    globalCache.loadingPromise = undefined;
+  }, 10000); // 10 second timeout
+  
   globalCache.loadingPromise = Promise.all([
     getSalesStats().catch((err: Error | unknown) => {
       console.error('Sales stats error:', err)
@@ -80,6 +100,8 @@ const getDashboardData = async () => {
       return null
     })
   ]).then(([salesData, purchasesData, expensesData, financialData]) => {
+    clearTimeout(timeoutId);
+    
     const result: DashboardStats = {
       sales: salesData,
       purchases: purchasesData, 
@@ -93,11 +115,13 @@ const getDashboardData = async () => {
     globalCache.isLoading = false
     globalCache.loadingPromise = undefined
     
-    console.log('✅ Dashboard data loaded and cached')
+    // console.log('✅ Dashboard data loaded and cached')
     return result
   }).catch((error: Error | unknown) => {
+    clearTimeout(timeoutId);
     globalCache.isLoading = false
     globalCache.loadingPromise = undefined
+    console.error('❌ Dashboard data loading failed:', error)
     throw error
   })
   
@@ -115,9 +139,9 @@ const getSalesStats = async () => {
 
     if (error) throw error
 
-    const totalRevenue = sales.reduce((sum, sale) => sum + parseFloat(sale.total_amount || 0), 0)
-    const totalProfit = sales.reduce((sum, sale) => sum + parseFloat(sale.profit || 0), 0)
-    const completedSales = sales.filter(sale => sale.status === 'completed').length
+    const totalRevenue = sales.reduce((sum: number, sale: any) => sum + parseFloat(sale.total_amount || 0), 0)
+    const totalProfit = sales.reduce((sum: number, sale: any) => sum + parseFloat(sale.profit || 0), 0)
+    const completedSales = sales.filter((sale: any) => sale.status === 'completed').length
     const totalSales = sales.length
 
     return {
@@ -203,8 +227,16 @@ export default function DashboardPage() {
   // Clear cache function
   const clearCache = () => {
     globalCache = {}
-    console.log('🗑️ Cache cleared')
+    console.log('🗑️ Dashboard cache cleared')
   }
+  
+  // Expose cache clearing function globally for debugging
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).clearDashboardCache = clearCache
+      // console.log('🔧 Dashboard cache clearing available at window.clearDashboardCache()')
+    }
+  }, [])
 
   // Refresh data
   const handleRefresh = React.useCallback(async () => {
@@ -243,14 +275,14 @@ export default function DashboardPage() {
     const loadData = async () => {
       // Prevent duplicate calls
       if (loadingRef.current || dataLoadedRef.current) {
-        console.log('🔄 Dashboard data loading already in progress or completed, skipping...')
+        // console.log('🔄 Dashboard data loading already in progress or completed, skipping...')
         return
       }
 
       try {
         loadingRef.current = true
         setLoading(true)
-        console.log('🔄 Loading dashboard data...')
+        // console.log('🔄 Loading dashboard data...')
 
         // Use the new deduplicating function
         const dashboardData = await getDashboardData()
@@ -259,7 +291,7 @@ export default function DashboardPage() {
         if (mountedRef.current) {
           setStats(dashboardData)
           dataLoadedRef.current = true
-          console.log('✅ Dashboard data loaded successfully')
+          // console.log('✅ Dashboard data loaded successfully')
         }
       } catch (error) {
         console.error('Dashboard data loading failed:', error)
@@ -299,50 +331,53 @@ export default function DashboardPage() {
 
   const LoadingSkeleton = () => (
     <PageWrapper>
-      <div className="flex-1 space-y-6 p-6">
+      <div className="flex-1 space-y-4 sm:space-y-6 p-4 sm:p-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-            <p className="text-muted-foreground">
-              Your business overview
-            </p>
+                  <div className="flex flex-col space-y-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
+            <div>
+              <Skeleton className="h-6 sm:h-8 w-32 sm:w-40" />
+              <Skeleton className="h-3 sm:h-4 w-48 sm:w-60 mt-2" />
+            </div>
+            <div className="flex items-center space-x-2">
+              <Skeleton className="h-9 w-40" />
+              <Skeleton className="h-9 w-20" />
+            </div>
           </div>
-          <div className="flex items-center space-x-2">
-            <Button variant="outline" disabled className="w-32">
-              <CalendarDays className="mr-2 h-4 w-4" />
-              Loading...
-            </Button>
-            <Button variant="outline" disabled>
-              <Plus className="mr-2 h-4 w-4" />
-              Refresh
-            </Button>
-          </div>
-        </div>
 
         {/* Stats Cards Skeleton */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="p-6 rounded-lg" style={{ boxShadow: '0 2px 8px #00000005', backgroundColor: '#ffffff' }}>
+            <div key={i} className="p-4 sm:p-6 rounded-lg" style={{ boxShadow: '0 2px 8px #00000005', backgroundColor: '#ffffff' }}>
               <div className="flex items-center justify-between mb-2">
-                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-4 w-20 sm:w-24" />
                 <Skeleton className="h-4 w-4" />
               </div>
-              <Skeleton className="h-8 w-20 mb-2" />
-              <Skeleton className="h-3 w-32" />
+              <Skeleton className="h-6 sm:h-8 w-16 sm:w-20 mb-2" />
+              <Skeleton className="h-3 w-24 sm:w-32" />
+            </div>
+          ))}
+        </div>
+
+        {/* Financial Summary Skeleton */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="p-4 sm:p-6 rounded-lg" style={{ boxShadow: '0 2px 8px #00000005', backgroundColor: '#ffffff' }}>
+              <Skeleton className="h-5 sm:h-6 w-28 sm:w-32 mb-4" />
+              <Skeleton className="h-7 sm:h-8 w-24 sm:w-28 mb-2" />
+              <Skeleton className="h-3 w-full" />
             </div>
           ))}
         </div>
 
         {/* Charts Skeleton */}
-        <div className="grid gap-6 md:grid-cols-2">
-          <div className="p-6 rounded-lg" style={{ boxShadow: '0 2px 8px #00000005', backgroundColor: '#ffffff' }}>
-            <Skeleton className="h-6 w-32 mb-4" />
-            <Skeleton className="h-64 w-full" />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+          <div className="p-4 sm:p-6 rounded-lg" style={{ boxShadow: '0 2px 8px #00000005', backgroundColor: '#ffffff' }}>
+            <Skeleton className="h-5 sm:h-6 w-28 sm:w-32 mb-4" />
+            <Skeleton className="h-48 sm:h-64 w-full" />
           </div>
-          <div className="p-6 rounded-lg" style={{ boxShadow: '0 2px 8px #00000005', backgroundColor: '#ffffff' }}>
-            <Skeleton className="h-6 w-32 mb-4" />
-            <Skeleton className="h-64 w-full" />
+          <div className="p-4 sm:p-6 rounded-lg" style={{ boxShadow: '0 2px 8px #00000005', backgroundColor: '#ffffff' }}>
+            <Skeleton className="h-5 sm:h-6 w-28 sm:w-32 mb-4" />
+            <Skeleton className="h-48 sm:h-64 w-full" />
           </div>
         </div>
       </div>
@@ -355,20 +390,20 @@ export default function DashboardPage() {
 
   return (
     <PageWrapper>
-      <div className="flex-1 space-y-6 p-6">
+      <div className="flex-1 space-y-4 sm:space-y-6 p-4 sm:p-6">
         {/* Header */}
         <StaggerContainer>
           <StaggerItem>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col space-y-4 sm:flex-row sm:items-center sm:justify-between sm:space-y-0">
               <div>
-                <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-                <p className="text-muted-foreground">
+                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Dashboard</h1>
+                <p className="text-sm sm:text-base text-muted-foreground">
                   Your business overview for {timePeriod === 'today' ? 'today' : timePeriod === 'week' ? 'this week' : 'this month'}
                 </p>
               </div>
               <div className="flex items-center space-x-2">
                 <Select value={timePeriod} onValueChange={(value: 'today' | 'week' | 'month') => setTimePeriod(value)}>
-                  <SelectTrigger className="w-32">
+                  <SelectTrigger className="w-40">
                     <CalendarDays className="mr-2 h-4 w-4" />
                     <SelectValue />
                   </SelectTrigger>
@@ -379,14 +414,14 @@ export default function DashboardPage() {
                   </SelectContent>
                 </Select>
                 <AnimatedButton 
-                  variant="outline" 
                   onClick={handleRefresh}
                   disabled={refreshing}
+                  className="bg-black hover:bg-gray-800 text-white"
                 >
                   {refreshing ? (
                     <div className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full mr-2" />
                   ) : (
-                <Plus className="mr-2 h-4 w-4" />
+                    <RefreshCw className="mr-2 h-4 w-4" />
                   )}
                   Refresh
               </AnimatedButton>
@@ -397,7 +432,7 @@ export default function DashboardPage() {
 
         {/* Key Metrics Cards */}
         <StaggerContainer delay={0.05}>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Total Revenue */}
             <StaggerItem>
               <AnimatedCard noHover={true}>
@@ -406,7 +441,7 @@ export default function DashboardPage() {
                   <TrendingUp className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">
+                  <div className="text-xl sm:text-2xl font-bold">
                     ৳{metrics ? metrics.revenue.toLocaleString() : '0'}
                   </div>
                   <p className="text-xs text-muted-foreground">
@@ -425,7 +460,7 @@ export default function DashboardPage() {
                   <TrendingUp className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">
+                  <div className="text-xl sm:text-2xl font-bold">
                     ৳{metrics ? metrics.netIncome.toLocaleString() : '0'}
                   </div>
                   <p className="text-xs text-muted-foreground">
@@ -444,7 +479,7 @@ export default function DashboardPage() {
                   <ShoppingCart className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">
+                  <div className="text-xl sm:text-2xl font-bold">
                     ৳{stats.purchases ? stats.purchases.totalAmount.toLocaleString() : '0'}
                   </div>
                   <p className="text-xs text-muted-foreground">
@@ -463,7 +498,7 @@ export default function DashboardPage() {
                   <Receipt className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">
+                  <div className="text-xl sm:text-2xl font-bold">
                     ৳{stats.expenses ? stats.expenses.totalExpenses.toLocaleString() : '0'}
                   </div>
                   <p className="text-xs text-muted-foreground">
@@ -478,7 +513,7 @@ export default function DashboardPage() {
 
         {/* Financial Summary */}
           <StaggerContainer delay={0.1}>
-          <div className="grid gap-6 md:grid-cols-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
             {/* Assets */}
             <StaggerItem>
               <AnimatedCard noHover={true}>
@@ -489,7 +524,7 @@ export default function DashboardPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-3xl font-bold text-green-600">
+                  <div className="text-2xl sm:text-3xl font-bold text-green-600">
                     ৳{stats.financial ? stats.financial.totalAssets.toLocaleString() : '0'}
                   </div>
                   <p className="text-sm text-muted-foreground mt-2">
@@ -509,7 +544,7 @@ export default function DashboardPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-3xl font-bold text-red-600">
+                  <div className="text-2xl sm:text-3xl font-bold text-red-600">
                     ৳{stats.financial ? stats.financial.totalLiabilities.toLocaleString() : '0'}
                   </div>
                   <p className="text-sm text-muted-foreground mt-2">
@@ -529,7 +564,7 @@ export default function DashboardPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-3xl font-bold text-blue-600">
+                  <div className="text-2xl sm:text-3xl font-bold text-blue-600">
                     ৳{stats.financial ? (stats.financial.totalAssets - stats.financial.totalLiabilities).toLocaleString() : '0'}
                   </div>
                   <p className="text-sm text-muted-foreground mt-2">
@@ -543,7 +578,7 @@ export default function DashboardPage() {
 
         {/* Module Status */}
         <StaggerContainer delay={0.15}>
-          <div className="grid gap-6 md:grid-cols-2">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
             {/* Sales Overview */}
             <StaggerItem>
               <AnimatedCard noHover={true}>

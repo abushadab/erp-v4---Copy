@@ -74,7 +74,7 @@ export function useCurrentUser() {
         setLoading(true)
         setError(null)
 
-        console.log('👤 Fetching user data for:', userId)
+        // console.log('👤 Fetching user data for:', userId)
         const userData = await getUserWithPermissions(userId)
 
         // Only update if this is still the current user
@@ -90,7 +90,7 @@ export function useCurrentUser() {
             globalSafetyTimeout = null
           }
           
-          console.log('✅ User data loaded for:', userId)
+          // console.log('✅ User data loaded for:', userId)
         }
       } catch (err: any) {
         console.error('Error fetching user data:', err)
@@ -230,7 +230,7 @@ export function useCurrentUser() {
     const {
       data: { subscription }
          } = supabase.auth.onAuthStateChange(async (event: any, session: any) => {
-       console.log('🔄 Auth state changed:', event, session?.user?.id ? 'User ID: ' + session.user.id : 'No user')
+       // console.log('🔄 Auth state changed:', event, session?.user?.id ? 'User ID: ' + session.user.id : 'No user')
       
       try {
         if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
@@ -238,7 +238,7 @@ export function useCurrentUser() {
           
           // Only fetch new data if user changed or we don't have data
           if (globalCurrentUserId !== userId || !globalUserData) {
-            console.log('👤 New user detected on', event, ', fetching data for:', userId)
+            // console.log('👤 New user detected on', event, ', fetching data for:', userId)
             currentUserIdRef.current = userId
             globalCurrentUserId = userId
             await fetchUser(userId)

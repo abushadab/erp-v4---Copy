@@ -33,10 +33,10 @@ export class ActivityLogger {
         return null
       }
 
-      // Get user profile to get name and email
+      // Get user profile to get name (email comes from auth.users)
       const { data: userProfile } = await this.supabase
         .from('user_profiles')
-        .select('name, email')
+        .select('name')
         .eq('id', user.id)
         .single()
 
@@ -48,7 +48,7 @@ export class ActivityLogger {
       const { data: result, error } = await this.supabase.rpc('log_activity_simple', {
         p_user_id: user.id,
         p_user_name: userProfile?.name || user.email || 'Unknown User',
-        p_user_email: userProfile?.email || user.email || null,
+        p_user_email: user.email || null,
         p_action: data.action,
         p_resource_type: data.resourceType,
         p_resource_id: data.resourceId || null,

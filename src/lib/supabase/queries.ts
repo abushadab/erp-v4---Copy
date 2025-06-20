@@ -62,7 +62,6 @@ export interface DatabaseWarehouse {
   manager?: string
   contact?: string
   capacity?: number
-  current_stock?: number
   status: 'active' | 'inactive'
   created_at: string
   updated_at: string

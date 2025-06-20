@@ -219,7 +219,6 @@ export async function createWarehouse(data: CreateWarehouseData): Promise<string
     manager: data.manager,
     contact: data.contact,
     capacity: data.capacity || 0,
-    current_stock: 0, // Start with 0 stock
     status: 'inactive' as const // Always start as inactive
   }
 
