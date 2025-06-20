@@ -1,10 +1,4 @@
 {
-  "builds": [
-    {
-      "src": "next.config.ts",
-      "use": "@vercel/next"
-    }
-  ],
   "functions": {
     "src/app/**": {
       "maxDuration": 30
