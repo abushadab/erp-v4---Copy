@@ -9,24 +9,110 @@ import type {
   TrialBalanceRow
 } from './types'
 
-// Function-level request deduplication
-const pendingRequests = new Map<string, Promise<any>>()
+// Enhanced cache with data persistence and timeout protection
+const cache = new Map<string, {
+  data: any
+  timestamp: number
+  promise?: Promise<any>
+}>()
 
-function withDeduplication<T>(key: string, fn: () => Promise<T>): Promise<T> {
-  const existingRequest = pendingRequests.get(key)
-  
-  if (existingRequest) {
-    console.log(`⏳ Using existing request for ${key}`)
-    return existingRequest
+const CACHE_DURATION = 30000 // 30 seconds cache
+const REQUEST_TIMEOUT = 15000 // 15 seconds timeout
+
+// Global debugging utility for accounts cache
+if (typeof window !== 'undefined') {
+  (window as any).clearAccountsClientCache = () => {
+    cache.clear()
+    console.log('🧹 Accounts client cache cleared')
   }
   
-      // console.log(`🆕 Creating new request for ${key}`)
-  const promise = fn().finally(() => {
-    pendingRequests.delete(key)
+  (window as any).debugAccountsClientCache = () => {
+    console.log('🔍 Accounts Client Cache Debug:', {
+      size: cache.size,
+      keys: Array.from(cache.keys()),
+      entries: Array.from(cache.entries()).map(([key, value]) => ({
+        key,
+        age: Date.now() - value.timestamp,
+        hasData: !!value.data,
+        hasPromise: !!value.promise
+      }))
+    })
+  }
+}
+
+function withDeduplication<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const now = Date.now()
+  const cached = cache.get(key)
+  
+  // Return fresh cached data if available
+  if (cached && cached.data && (now - cached.timestamp) < CACHE_DURATION) {
+    console.log(`✅ Using cached data for ${key}`)
+    return Promise.resolve(cached.data)
+  }
+  
+  // Return existing promise if one is in progress
+  if (cached && cached.promise) {
+    console.log(`⏳ Using existing request for ${key}`)
+    return cached.promise
+  }
+  
+  console.log(`🆕 Creating new request for ${key}`)
+  
+  // Create new request with proper timeout and AbortController
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => {
+    controller.abort()
+  }, REQUEST_TIMEOUT)
+  
+  const promise = fn()
+    .then((data) => {
+      // Cache successful result
+      cache.set(key, {
+        data,
+        timestamp: now,
+        promise: undefined
+      })
+      console.log(`✅ Request completed for ${key}`)
+      return data
+    })
+    .catch((error) => {
+      console.error(`❌ Request failed for ${key}:`, error)
+      // Remove failed promise but keep old data if available
+      const current = cache.get(key)
+      if (current && current.data) {
+        cache.set(key, {
+          data: current.data,
+          timestamp: current.timestamp,
+          promise: undefined
+        })
+      } else {
+        cache.delete(key)
+      }
+      throw error
+    })
+    .finally(() => {
+      clearTimeout(timeoutId)
+    })
+  
+  // Apply timeout wrapper
+  const timeoutPromise = Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => {
+        console.warn(`⚠️ Request timeout for ${key}`)
+        reject(new Error(`Request timeout for ${key}`))
+      }, REQUEST_TIMEOUT)
+    })
+  ])
+  
+  // Cache the promise
+  cache.set(key, {
+    data: cached?.data,
+    timestamp: cached?.timestamp || now,
+    promise: timeoutPromise
   })
   
-  pendingRequests.set(key, promise)
-  return promise
+  return timeoutPromise
 }
 
 export interface CreateAccountData {
@@ -36,6 +122,8 @@ export interface CreateAccountData {
   category_id: string
   description?: string
   opening_balance?: number
+  is_payment_method?: boolean
+  payment_method_type?: string
 }
 
 export interface CreateJournalEntryData {
@@ -279,27 +367,44 @@ export async function getFinancialSummary(): Promise<{
   netIncome: number
 }> {
   return withDeduplication('financial_summary', async () => {
-    const accounts = await getAccountsWithCategories()
+    // Directly query for financial summary to avoid circular dependency
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from('accounts')
+      .select(`
+        balance,
+        account_categories (
+          type
+        )
+      `)
+      .eq('is_active', true)
+
+    if (error) {
+      console.error('Error fetching financial summary:', error)
+      throw error
+    }
+
+    const accounts = data || []
     
     const totalAssets = accounts
-      .filter(a => a.account_categories.type === 'asset')
-      .reduce((sum, a) => sum + (a.balance || 0), 0)
+      .filter((a: any) => a.account_categories?.type === 'asset')
+      .reduce((sum: number, a: any) => sum + (a.balance || 0), 0)
       
     const totalLiabilities = accounts
-      .filter(a => a.account_categories.type === 'liability')
-      .reduce((sum, a) => sum + (a.balance || 0), 0)
+      .filter((a: any) => a.account_categories?.type === 'liability')
+      .reduce((sum: number, a: any) => sum + (a.balance || 0), 0)
       
     const totalEquity = accounts
-      .filter(a => a.account_categories.type === 'equity')
-      .reduce((sum, a) => sum + (a.balance || 0), 0)
+      .filter((a: any) => a.account_categories?.type === 'equity')
+      .reduce((sum: number, a: any) => sum + (a.balance || 0), 0)
       
     const totalRevenue = accounts
-      .filter(a => a.account_categories.type === 'revenue')
-      .reduce((sum, a) => sum + (a.balance || 0), 0)
+      .filter((a: any) => a.account_categories?.type === 'revenue')
+      .reduce((sum: number, a: any) => sum + (a.balance || 0), 0)
       
     const totalExpenses = accounts
-      .filter(a => a.account_categories.type === 'expense')
-      .reduce((sum, a) => sum + (a.balance || 0), 0)
+      .filter((a: any) => a.account_categories?.type === 'expense')
+      .reduce((sum: number, a: any) => sum + (a.balance || 0), 0)
     
     const netIncome = totalRevenue - totalExpenses
 

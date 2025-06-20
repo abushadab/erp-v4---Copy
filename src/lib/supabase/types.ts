@@ -120,8 +120,10 @@ export type Database = {
           description: string | null
           id: string
           is_active: boolean | null
+          is_payment_method: boolean | null
           is_system: boolean | null
           opening_balance: number | null
+          payment_method_type: string | null
           updated_at: string | null
         }
         Insert: {
@@ -136,8 +138,10 @@ export type Database = {
           description?: string | null
           id?: string
           is_active?: boolean | null
+          is_payment_method?: boolean | null
           is_system?: boolean | null
           opening_balance?: number | null
+          payment_method_type?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -152,8 +156,10 @@ export type Database = {
           description?: string | null
           id?: string
           is_active?: boolean | null
+          is_payment_method?: boolean | null
           is_system?: boolean | null
           opening_balance?: number | null
+          payment_method_type?: string | null
           updated_at?: string | null
         }
         Relationships: [
@@ -165,6 +171,60 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      activity_logs: {
+        Row: {
+          action: string
+          created_at: string | null
+          description: string
+          id: string
+          ip_address: unknown | null
+          new_values: Json | null
+          old_values: Json | null
+          resource_id: string | null
+          resource_name: string | null
+          resource_type: string
+          session_id: string | null
+          user_agent: string | null
+          user_email: string | null
+          user_id: string | null
+          user_name: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string | null
+          description: string
+          id?: string
+          ip_address?: unknown | null
+          new_values?: Json | null
+          old_values?: Json | null
+          resource_id?: string | null
+          resource_name?: string | null
+          resource_type: string
+          session_id?: string | null
+          user_agent?: string | null
+          user_email?: string | null
+          user_id?: string | null
+          user_name?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string | null
+          description?: string
+          id?: string
+          ip_address?: unknown | null
+          new_values?: Json | null
+          old_values?: Json | null
+          resource_id?: string | null
+          resource_name?: string | null
+          resource_type?: string
+          session_id?: string | null
+          user_agent?: string | null
+          user_email?: string | null
+          user_id?: string | null
+          user_name?: string | null
+        }
+        Relationships: []
       }
       attribute_values: {
         Row: {
@@ -1602,7 +1662,16 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      activity_summary: {
+        Row: {
+          action: string | null
+          activity_count: number | null
+          activity_date: string | null
+          resource_type: string | null
+          unique_users: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       get_total_available_packaging_stock: {
@@ -1798,12 +1867,12 @@ export const Constants = {
   },
 } as const
 
+// Legacy type definitions for backward compatibility
 export type DatabasePackaging = Tables<'packaging'>;
 export type DatabasePackagingVariation = Tables<'packaging_variations'>;
 export type DatabasePackagingWarehouseStock = Tables<'packaging_warehouse_stock'>;
 export type DatabaseProductVariation = Tables<'product_variations'>;
 
-// Custom types for the application
 export type Customer = Tables<'customers'>;
 export type Sale = Tables<'sales'>;
 export type SaleItem = Tables<'sale_items'>;
@@ -1831,7 +1900,6 @@ export type ReturnItemWithVariation = ReturnItem & {
   }[];
 };
 
-// Extended types for relationships
 export type SaleWithItems = Sale & {
   sale_items: SaleItem[]
 }
@@ -1840,7 +1908,6 @@ export type ReturnWithItems = Return & {
   return_items: ReturnItemWithVariation[]
 }
 
-// Extended accounting types
 export type AccountWithCategory = Account & {
   account_categories: AccountCategory
 }

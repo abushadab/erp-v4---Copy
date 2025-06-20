@@ -427,23 +427,107 @@ export const deleteCustomer = async (id: string) => {
 }
 
 // Sales operations
-export const getSales = async () => {
-  console.log('🔄 getSales() - Making Supabase API call at', new Date().toISOString())
-  const { data, error } = await supabase
-    .from('sales')
-    .select(`
-      *,
-      sale_items (*)
-    `)
-    .order('created_at', { ascending: false })
+export const getSalesBasic = async () => {
+  console.log('🔄 getSalesBasic() - Making basic Supabase API call (no joins) at', new Date().toISOString())
+  
+  try {
+    // Simple query without joins for debugging
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
+    
+    const { data, error } = await supabase
+      .from('sales')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(100) // Small limit for testing
+      .abortSignal(controller.signal)
+    
+    clearTimeout(timeoutId)
 
-  if (error) {
-    console.error('❌ getSales() - Error:', error)
+    if (error) {
+      console.error('❌ getSalesBasic() - Error:', error)
+      throw error
+    }
+    
+    if (!data) {
+      console.log('⚠️ getSalesBasic() - No data returned, returning empty array')
+      return []
+    }
+    
+    console.log('✅ getSalesBasic() - Success, returned', data.length, 'sales records')
+    return data
+  } catch (error: any) {
+    if (error.name === 'AbortError') {
+      console.error('❌ getSalesBasic() - Request timed out after 10 seconds')
+      throw new Error('Basic sales query timeout - database connection issue')
+    }
+    
+    console.error('❌ getSalesBasic() - Unexpected error:', error)
     throw error
   }
+}
+
+export const getSales = async () => {
+  console.log('🔄 getSales() - Making Supabase API call at', new Date().toISOString())
   
-  console.log('✅ getSales() - Success, returned', data.length, 'sales records')
-  return data as SaleWithItems[]
+  try {
+    // First try a basic query to see if the issue is with joins
+    try {
+      await getSalesBasic()
+      console.log('✅ Basic sales query successful, proceeding with full query')
+    } catch (basicError) {
+      console.error('❌ Basic sales query failed, database connection issue:', basicError)
+      throw new Error('Database connection issue - unable to access sales table')
+    }
+    
+    // Add timeout and optimize query
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 15000) // 15 second timeout
+    
+    const { data, error } = await supabase
+      .from('sales')
+      .select(`
+        *,
+        sale_items (*)
+      `)
+      .order('created_at', { ascending: false })
+      .limit(1000) // Add reasonable limit to prevent huge datasets
+      .abortSignal(controller.signal)
+    
+    clearTimeout(timeoutId)
+
+    if (error) {
+      console.error('❌ getSales() - Error:', error)
+      throw error
+    }
+    
+    if (!data) {
+      console.log('⚠️ getSales() - No data returned, returning empty array')
+      return []
+    }
+    
+    console.log('✅ getSales() - Success, returned', data.length, 'sales records')
+    return data as SaleWithItems[]
+  } catch (error: any) {
+    if (error.name === 'AbortError') {
+      console.error('❌ getSales() - Request timed out after 15 seconds')
+      throw new Error('Sales data request timeout after 15 seconds')
+    }
+    
+    // Check for common Supabase/database errors
+    if (error.code === 'PGRST301') {
+      console.error('❌ getSales() - Row Level Security error - user may not have permission')
+      throw new Error('Permission denied: Unable to access sales data')
+    }
+    
+    if (error.code === 'PGRST116') {
+      console.error('❌ getSales() - Query timeout from database')
+      throw new Error('Database query timeout - too much data to process')
+    }
+    
+    console.error('❌ getSales() - Unexpected error:', error)
+    throw error
+  }
 }
 
 export const getSaleById = async (id: string) => {
@@ -878,5 +962,290 @@ export const getCustomerStats = async () => {
     totalCustomers,
     totalRevenue,
     totalOrders
+  }
+}
+
+// 💳 SALES PAYMENT FUNCTIONS
+
+// Payment types for sales
+export interface SalePayment {
+  id: string
+  sale_id: string
+  amount: number
+  payment_method: 'cash' | 'bank_transfer' | 'check' | 'credit_card' | 'other'
+  payment_date: string
+  notes?: string
+  journal_entry_id?: string
+  created_by?: string
+  status: 'active' | 'void'
+  created_at: string
+  updated_at: string
+}
+
+export interface CreateSalePaymentData {
+  sale_id: string
+  amount: number
+  payment_method: 'cash' | 'bank_transfer' | 'check' | 'credit_card' | 'other'
+  payment_date: string
+  notes?: string
+  created_by: string
+}
+
+// Payment methods for UI (reuse from purchases)
+export const SALE_PAYMENT_METHODS = [
+  { value: 'cash', label: 'Cash' },
+  { value: 'bank_transfer', label: 'Bank Transfer' },
+  { value: 'check', label: 'Check' },
+  { value: 'credit_card', label: 'Credit Card' },
+  { value: 'other', label: 'Other' }
+]
+
+// Sale events for timeline
+export interface SaleEvent {
+  id: string
+  sale_id: string
+  event_type: 'order_placed' | 'payment_made' | 'payment_voided' | 'returned' | 'cancelled' | 'status_change'
+  event_title: string
+  event_description?: string
+  previous_status?: string
+  new_status?: string
+  payment_amount?: number
+  payment_method?: string
+  payment_id?: string
+  return_amount?: number
+  return_reason?: string
+  metadata?: any
+  created_by?: string
+  created_at: string
+  event_date: string
+}
+
+// Get all payments for a sale
+export async function getSalePayments(saleId: string): Promise<SalePayment[]> {
+  return apiCache.get(`sale-payments-${saleId}`, async () => {
+    const supabase = createClient()
+    
+    const { data, error } = await supabase
+      .from('sale_payments')
+      .select('*')
+      .eq('sale_id', saleId)
+      .order('payment_date', { ascending: false })
+
+    if (error) {
+      console.error('Error fetching sale payments:', error)
+      throw new Error('Failed to fetch sale payments')
+    }
+
+    return data || []
+  })
+}
+
+// Create a new payment for a sale
+export async function createSalePayment(paymentData: CreateSalePaymentData): Promise<SalePayment> {
+  const supabase = createClient()
+
+  // Generate payment ID
+  const paymentId = `SPAY-${Date.now()}`
+
+  const { data, error } = await supabase
+    .from('sale_payments')
+    .insert({
+      id: paymentId,
+      ...paymentData
+    })
+    .select()
+    .single()
+
+  if (error) {
+    console.error('Error creating sale payment:', error)
+    throw new Error('Failed to create sale payment')
+  }
+
+  // Clear cache for this sale's payments
+  apiCache.delete(`sale-payments-${paymentData.sale_id}`)
+  
+  // The database triggers will automatically update the sale amount_paid and payment_status
+  console.log(`✅ Created payment ${paymentId} for sale ${paymentData.sale_id}`)
+
+  // 📅 TIMELINE: Create timeline event for the payment
+  try {
+    const sale = await getSaleById(paymentData.sale_id)
+    
+    if (sale) {
+      // Calculate payment status after this payment
+      const newAmountPaid = (sale.amount_paid || 0) + paymentData.amount
+      const paymentStatus = newAmountPaid >= sale.total_amount ? 'fully paid' :
+                           newAmountPaid > 0 ? 'partially paid' : 'paid'
+
+      console.log(`💰 Payment calculation: totalAmount=${sale.total_amount}, currentPaid=${sale.amount_paid || 0}, newPayment=${paymentData.amount}, totalAfter=${newAmountPaid}, status=${paymentStatus}`)
+
+      await createSaleEvent({
+        sale_id: paymentData.sale_id,
+        event_type: 'payment_made',
+        event_title: `Payment Received`,
+        event_description: `${paymentData.payment_method.replace('_', ' ')} payment of ৳${paymentData.amount.toLocaleString()} received${paymentData.notes ? ` - ${paymentData.notes}` : ''}`,
+        payment_amount: paymentData.amount,
+        payment_method: paymentData.payment_method,
+        payment_id: paymentId,
+        created_by: paymentData.created_by,
+        metadata: {
+          payment_status: paymentStatus,
+          total_paid: newAmountPaid,
+          remaining_balance: Math.max(0, sale.total_amount - newAmountPaid)
+        }
+      })
+    }
+  } catch (timelineError) {
+    console.warn('⚠️ Failed to create timeline event for payment:', timelineError)
+    // Don't fail the payment creation if timeline fails
+  }
+
+  return data
+}
+
+// Void a sale payment
+export async function voidSalePayment(paymentId: string, voidReason?: string): Promise<SalePayment> {
+  const supabase = createClient()
+
+  const { data, error } = await supabase
+    .from('sale_payments')
+    .update({ 
+      status: 'void',
+      updated_at: new Date().toISOString(),
+      notes: voidReason ? `VOIDED: ${voidReason}` : 'VOIDED'
+    })
+    .eq('id', paymentId)
+    .select()
+    .single()
+
+  if (error) {
+    console.error('Error voiding sale payment:', error)
+    throw new Error('Failed to void sale payment')
+  }
+
+  // Clear cache
+  apiCache.delete(`sale-payments-${data.sale_id}`)
+
+  console.log(`❌ Voided payment ${paymentId}`)
+
+  // Create timeline event for voided payment
+  try {
+    await createSaleEvent({
+      sale_id: data.sale_id,
+      event_type: 'payment_voided',
+      event_title: `Payment Voided`,
+      event_description: `Payment of ৳${data.amount.toLocaleString()} voided${voidReason ? ` - ${voidReason}` : ''}`,
+      payment_amount: data.amount,
+      payment_method: data.payment_method,
+      payment_id: paymentId,
+      created_by: 'admin', // TODO: Get actual user
+      metadata: { void_reason: voidReason }
+    })
+  } catch (timelineError) {
+    console.warn('⚠️ Failed to create timeline event for voided payment:', timelineError)
+  }
+
+  return data
+}
+
+// Create a sale event for timeline tracking
+export async function createSaleEvent(eventData: {
+  sale_id: string
+  event_type: SaleEvent['event_type']
+  event_title: string
+  event_description?: string
+  previous_status?: string
+  new_status?: string
+  payment_amount?: number
+  payment_method?: string
+  payment_id?: string
+  return_amount?: number
+  return_reason?: string
+  metadata?: any
+  created_by?: string
+}): Promise<string> {
+  const supabase = createClient()
+
+  const { data, error } = await supabase
+    .from('sale_events')
+    .insert({
+      ...eventData,
+      event_date: new Date().toISOString()
+    })
+    .select('id')
+    .single()
+
+  if (error) {
+    console.error('Error creating sale event:', error)
+    throw new Error('Failed to create sale event')
+  }
+
+  return data.id
+}
+
+// Get sale timeline events
+export async function getSaleTimeline(saleId: string): Promise<SaleEvent[]> {
+  return apiCache.get(`sale-timeline-${saleId}`, async () => {
+    const supabase = createClient()
+    
+    const { data, error } = await supabase
+      .from('sale_events')
+      .select('*')
+      .eq('sale_id', saleId)
+      .order('event_date', { ascending: false })
+
+    if (error) {
+      console.error('Error fetching sale timeline:', error)
+      throw new Error('Failed to fetch sale timeline')
+    }
+
+    return data || []
+  })
+}
+
+// Calculate payment status and amounts
+export function calculateSalePaymentStatus(sale: SaleWithItems, amountPaid: number): {
+  status: 'unpaid' | 'partial' | 'paid' | 'overpaid'
+  remainingAmount: number
+  overpaidAmount: number
+  progressPercentage: number
+} {
+  const totalAmount = sale.total_amount
+  const remaining = Math.max(0, totalAmount - amountPaid)
+  const overpaid = Math.max(0, amountPaid - totalAmount)
+  
+  let status: 'unpaid' | 'partial' | 'paid' | 'overpaid'
+  if (amountPaid === 0) {
+    status = 'unpaid'
+  } else if (amountPaid >= totalAmount) {
+    status = overpaid > 0 ? 'overpaid' : 'paid'
+  } else {
+    status = 'partial'
+  }
+
+  const progressPercentage = Math.min(100, (amountPaid / totalAmount) * 100)
+
+  return {
+    status,
+    remainingAmount: remaining,
+    overpaidAmount: overpaid,
+    progressPercentage
+  }
+}
+
+// Get sale with payments information
+export async function getSaleWithPayments(saleId: string): Promise<SaleWithItems & { 
+  amount_paid?: number
+  payment_status?: string
+  payments?: SalePayment[]
+} | null> {
+  const sale = await getSaleById(saleId)
+  if (!sale) return null
+
+  const payments = await getSalePayments(saleId)
+  
+  return {
+    ...sale,
+    payments
   }
 } 

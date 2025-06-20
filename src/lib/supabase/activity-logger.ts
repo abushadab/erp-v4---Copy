@@ -289,6 +289,35 @@ export class ActivityLogger {
   }
 
   /**
+   * Log account creation
+   */
+  async logAccountCreate(accountId: string, accountName: string, accountData?: any): Promise<void> {
+    await this.logActivity({
+      action: 'create',
+      resourceType: 'account',
+      resourceId: accountId,
+      resourceName: accountName,
+      description: `Created new account: ${accountName}`,
+      newValues: accountData
+    })
+  }
+
+  /**
+   * Log account update
+   */
+  async logAccountUpdate(accountId: string, accountName: string, oldData?: any, newData?: any): Promise<void> {
+    await this.logActivity({
+      action: 'update',
+      resourceType: 'account',
+      resourceId: accountId,
+      resourceName: accountName,
+      description: `Updated account: ${accountName}`,
+      oldValues: oldData,
+      newValues: newData
+    })
+  }
+
+  /**
    * Get client IP address (simplified - in production you might use a service)
    */
   private async getClientIP(): Promise<string | null> {
@@ -333,4 +362,6 @@ export const logSaleUpdate = (id: string, customer: string, oldData?: any, newDa
 export const logSupplierCreate = (id: string, name: string, data?: any) => activityLogger.logSupplierCreate(id, name, data)
 export const logSupplierUpdate = (id: string, name: string, oldData?: any, newData?: any) => activityLogger.logSupplierUpdate(id, name, oldData, newData)
 export const logCustomerCreate = (id: string, name: string, data?: any) => activityLogger.logCustomerCreate(id, name, data)
-export const logCustomerUpdate = (id: string, name: string, oldData?: any, newData?: any) => activityLogger.logCustomerUpdate(id, name, oldData, newData) 
+export const logCustomerUpdate = (id: string, name: string, oldData?: any, newData?: any) => activityLogger.logCustomerUpdate(id, name, oldData, newData)
+export const logAccountCreate = (id: string, name: string, data?: any) => activityLogger.logAccountCreate(id, name, data)
+export const logAccountUpdate = (id: string, name: string, oldData?: any, newData?: any) => activityLogger.logAccountUpdate(id, name, oldData, newData) 
