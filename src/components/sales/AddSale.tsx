@@ -52,15 +52,7 @@ import {
 import { getPackagingByWarehouse, createSale } from '@/lib/supabase/sales-client'
 import { invalidateSalesCache } from '@/lib/hooks/useSalesData'
 
-// Payment methods
-const paymentMethods = [
-  { value: 'cod', label: 'Cash on Delivery (COD)' },
-  { value: 'bkash', label: 'bKash' },
-  { value: 'nagad', label: 'Nagad' },
-  { value: 'rocket', label: 'Rocket' },
-  { value: 'cash', label: 'Cash' },
-  { value: 'card', label: 'Credit/Debit Card' },
-]
+// Payment methods - now loaded from accounts marked as payment methods
 
 // Discount type enum
 type DiscountType = 'percentage' | 'fixed'
@@ -936,9 +928,11 @@ export default function AddSale({ editMode, existingSale, saleId }: AddSaleProps
     customers,
     warehouses,
     products,
+    paymentMethodAccounts,
     loadingCustomers,
     loadingWarehouses,
     loadingProducts,
+    loadingPaymentMethods,
     errors: dataErrors,
     loadProducts,
     clearCache
@@ -1608,7 +1602,7 @@ export default function AddSale({ editMode, existingSale, saleId }: AddSaleProps
 
   const printReceipt = () => {
     const selectedCustomerData = customers.find(c => c.id === selectedCustomer)
-    const selectedPaymentMethodData = paymentMethods.find(m => m.value === selectedPaymentMethod)
+    const selectedPaymentMethodData = paymentMethodAccounts.find(account => account.id === selectedPaymentMethod)
     
     const receiptContent = `
       <!DOCTYPE html>
@@ -1802,7 +1796,7 @@ export default function AddSale({ editMode, existingSale, saleId }: AddSaleProps
                   render={({ field }) => (
                     <div className="relative">
                       <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-black h-4 w-4 z-10 pointer-events-none" />
-                      <Select onValueChange={(value) => { field.onChange(value); setSelectedWarehouse(value) }} value={field.value}>
+                      <Select onValueChange={(value: string) => { field.onChange(value); setSelectedWarehouse(value) }} value={field.value}>
                         <SelectTrigger className={`pl-10 ${validationAttempted && !selectedWarehouse ? 'border-red-300 focus:border-red-500' : ''}`}>
                           <SelectValue placeholder="Select warehouse" className="truncate pr-2" />
                       </SelectTrigger>
@@ -1847,7 +1841,7 @@ export default function AddSale({ editMode, existingSale, saleId }: AddSaleProps
                   render={({ field }) => (
                     <div className="relative">
                       <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-black h-4 w-4 z-10 pointer-events-none" />
-                    <Select onValueChange={(value) => { field.onChange(value); setSelectedCustomer(value) }} value={field.value}>
+                    <Select onValueChange={(value: string) => { field.onChange(value); setSelectedCustomer(value) }} value={field.value}>
                         <SelectTrigger className={`pl-10 ${validationAttempted && !selectedCustomer ? 'border-red-300 focus:border-red-500' : ''}`}>
                           <SelectValue placeholder="Select customer" className="truncate pr-2" />
                       </SelectTrigger>
@@ -1908,16 +1902,22 @@ export default function AddSale({ editMode, existingSale, saleId }: AddSaleProps
                   render={({ field }) => (
                     <div className="relative">
                       <CreditCard className="absolute left-3 top-1/2 transform -translate-y-1/2 text-black h-4 w-4 z-10 pointer-events-none" />
-                    <Select onValueChange={(value) => { field.onChange(value); setSelectedPaymentMethod(value) }} value={field.value}>
+                    <Select onValueChange={(value: string) => { field.onChange(value); setSelectedPaymentMethod(value) }} value={field.value}>
                         <SelectTrigger className={`pl-10 ${validationAttempted && !selectedPaymentMethod ? 'border-red-300 focus:border-red-500' : ''}`}>
                           <SelectValue placeholder="Select payment method" className="truncate pr-2" />
                       </SelectTrigger>
                       <SelectContent>
-                        {paymentMethods.map((method) => (
-                          <SelectItem key={method.value} value={method.value}>
-                                <span className="truncate">{method.label}</span>
-                          </SelectItem>
-                        ))}
+                        {loadingPaymentMethods ? (
+                          <SelectItem value="loading" disabled>Loading payment methods...</SelectItem>
+                        ) : paymentMethodAccounts.length === 0 ? (
+                          <SelectItem value="none" disabled>No payment methods available</SelectItem>
+                        ) : (
+                          paymentMethodAccounts.map((account) => (
+                            <SelectItem key={account.id} value={account.id}>
+                              <span className="truncate">{account.account_name}</span>
+                            </SelectItem>
+                          ))
+                        )}
                       </SelectContent>
                     </Select>
                     </div>

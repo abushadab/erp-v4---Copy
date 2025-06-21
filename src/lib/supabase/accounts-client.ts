@@ -203,6 +203,29 @@ export async function getAccountsByType(type: string): Promise<AccountWithCatego
   return data || []
 }
 
+// Get accounts marked as payment methods
+export async function getPaymentMethodAccounts(): Promise<AccountWithCategory[]> {
+  return withDeduplication('payment_method_accounts', async () => {
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from('accounts')
+      .select(`
+        *,
+        account_categories (*)
+      `)
+      .eq('is_active', true)
+      .eq('is_payment_method', true)
+      .order('account_name', { ascending: true })
+
+    if (error) {
+      console.error('Error fetching payment method accounts:', error)
+      throw error
+    }
+
+    return data || []
+  })
+}
+
 // Create a new account
 export async function createAccount(accountData: CreateAccountData): Promise<Account> {
   const supabase = createClient()
