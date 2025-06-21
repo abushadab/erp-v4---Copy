@@ -37,6 +37,7 @@ import {
   Filter, 
   Eye, 
   Calendar,
+  CalendarIcon,
   User,
   ShoppingCart,
   CheckCircle,
@@ -51,6 +52,10 @@ import {
   Printer,
   CreditCard
 } from "lucide-react"
+import { Label } from "@/components/ui/label"
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover"
+import { Calendar as CalendarComponent } from "@/components/ui/calendar"
+import { format, subDays, subMonths } from "date-fns"
 import SalePaymentModal from "@/components/SalePaymentModal"
 import { type SaleWithItems } from "@/lib/supabase/sales-client"
 import { useSalesData } from "@/lib/hooks/useSalesData"
@@ -68,6 +73,47 @@ export default function SalesPage() {
   const [selectedSale, setSelectedSale] = React.useState<SaleWithItems | null>(null)
   const [currentPage, setCurrentPage] = React.useState(1)
   const [itemsPerPage, setItemsPerPage] = React.useState(10)
+  // Date filter states
+  type DateRange = {
+    from: Date | undefined
+    to?: Date | undefined
+  }
+
+  const [dateFilter, setDateFilter] = React.useState('all')
+  const [customDateRange, setCustomDateRange] = React.useState<DateRange | undefined>(undefined)
+  const [pendingDateFilter, setPendingDateFilter] = React.useState('all')
+  const [pendingCustomDateRange, setPendingCustomDateRange] = React.useState<DateRange | undefined>(undefined)
+  const [isDatePickerOpen, setIsDatePickerOpen] = React.useState(false)
+
+  const setDatePreset = (preset: string) => {
+    setPendingDateFilter(preset)
+
+    const now = new Date()
+    let dateRange: DateRange | undefined = undefined
+
+    switch (preset) {
+      case 'today':
+        dateRange = { from: now, to: now }
+        break
+      case 'yesterday':
+        const yesterday = subDays(now, 1)
+        dateRange = { from: yesterday, to: yesterday }
+        break
+      case 'week':
+        dateRange = { from: subDays(now, 7), to: now }
+        break
+      case 'month':
+        dateRange = { from: subMonths(now, 1), to: now }
+        break
+      case 'quarter':
+        dateRange = { from: subMonths(now, 3), to: now }
+        break
+      default:
+        dateRange = undefined
+    }
+
+    setPendingCustomDateRange(dateRange)
+  }
   
   // Handle payment modal
   const handleMakePayment = (sale: SaleWithItems) => {
@@ -97,7 +143,48 @@ export default function SalesPage() {
                          sale.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          sale.salesperson.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesStatus = selectedStatuses.includes(sale.status || '')
-    return matchesSearch && matchesStatus
+
+    // Date filtering
+    let matchesDate = true
+    if (dateFilter !== 'all') {
+      const saleDate = sale.sale_date ? new Date(sale.sale_date) : null
+      if (!saleDate) {
+        matchesDate = false
+      } else {
+        let range: DateRange | undefined
+        switch (dateFilter) {
+          case 'today':
+            const today = new Date()
+            range = { from: today, to: today }
+            break
+          case 'yesterday':
+            const yesterday = subDays(new Date(), 1)
+            range = { from: yesterday, to: yesterday }
+            break
+          case 'week':
+            range = { from: subDays(new Date(), 7), to: new Date() }
+            break
+          case 'month':
+            range = { from: subMonths(new Date(), 1), to: new Date() }
+            break
+          case 'quarter':
+            range = { from: subMonths(new Date(), 3), to: new Date() }
+            break
+          case 'custom':
+            range = customDateRange
+            break
+          default:
+            range = undefined
+        }
+        if (range?.from && range?.to) {
+          matchesDate = saleDate >= range.from && saleDate <= range.to
+        } else if (range?.from) {
+          matchesDate = saleDate >= range.from
+        }
+      }
+    }
+
+    return matchesSearch && matchesStatus && matchesDate
   })
 
   // Pagination calculations
@@ -193,11 +280,11 @@ export default function SalesPage() {
 
         {/* Table Skeleton */}
         <Card>
-          {/* Mobile Card Skeletons for very small screens */}
-          <div className="block sm:hidden">
-            <div className="space-y-4 p-4">
-              {Array.from({ length: 5 }).map((_, index) => (
-                <Card key={index} style={{ backgroundColor: '#f4f8f9' }} className="p-4">
+                  {/* Mobile Card Skeletons for small and medium screens */}
+        <div className="block lg:hidden">
+          <div className="space-y-4 p-4">
+            {Array.from({ length: 5 }).map((_, index) => (
+              <Card key={index} style={{ backgroundColor: '#f4f8f9' }} className="p-4">
                   <div className="flex items-start justify-between mb-3">
                     <div>
                       <Skeleton className="h-3 w-12 mb-1" />
@@ -242,8 +329,8 @@ export default function SalesPage() {
             </div>
           </div>
 
-          {/* Table Skeleton for small screens and up */}
-          <div className="hidden sm:block overflow-auto">
+          {/* Table Skeleton for large screens and up */}
+          <div className="hidden lg:block overflow-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -354,88 +441,186 @@ export default function SalesPage() {
         </Card>
       </div>
 
-      {/* Filters and Search */}
-      <div className="flex items-center space-x-4">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search sales..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-            suppressHydrationWarning
-          />
+      {/* Filters */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+        {/* Search */}
+        <div className="space-y-2 col-span-1 md:col-span-6">
+          <Label htmlFor="search">Search</Label>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              id="search"
+              placeholder="Search sales..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+              suppressHydrationWarning
+            />
+          </div>
         </div>
-        
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" suppressHydrationWarning>
-              <Filter className="mr-2 h-4 w-4" />
-              Filter by Status
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent suppressHydrationWarning>
-            <DropdownMenuLabel>Sale Status</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuCheckboxItem
-              checked={selectedStatuses.includes('completed')}
-              onCheckedChange={(checked) => {
-                if (checked) {
-                  setSelectedStatuses([...selectedStatuses, 'completed'])
-                } else {
-                  setSelectedStatuses(selectedStatuses.filter(s => s !== 'completed'))
-                }
-              }}
-            >
-              Completed
-            </DropdownMenuCheckboxItem>
-            <DropdownMenuCheckboxItem
-              checked={selectedStatuses.includes('returned')}
-              onCheckedChange={(checked) => {
-                if (checked) {
-                  setSelectedStatuses([...selectedStatuses, 'returned'])
-                } else {
-                  setSelectedStatuses(selectedStatuses.filter(s => s !== 'returned'))
-                }
-              }}
-            >
-              Returned
-            </DropdownMenuCheckboxItem>
-            <DropdownMenuCheckboxItem
-              checked={selectedStatuses.includes('partially returned')}
-              onCheckedChange={(checked) => {
-                if (checked) {
-                  setSelectedStatuses([...selectedStatuses, 'partially returned'])
-                } else {
-                  setSelectedStatuses(selectedStatuses.filter(s => s !== 'partially returned'))
-                }
-              }}
-            >
-              Partially Returned
-            </DropdownMenuCheckboxItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
 
-        <Select value={itemsPerPage.toString()} onValueChange={(value) => {
-          setItemsPerPage(parseInt(value))
-          setCurrentPage(1)
-        }}>
-          <SelectTrigger className="w-[100px]" suppressHydrationWarning>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent suppressHydrationWarning>
-            <SelectItem value="10">10</SelectItem>
-            <SelectItem value="25">25</SelectItem>
-            <SelectItem value="50">50</SelectItem>
-            <SelectItem value="100">100</SelectItem>
-          </SelectContent>
-        </Select>
+        {/* Date Range */}
+        <div className="space-y-2 col-span-1 md:col-span-6">
+          <Label htmlFor="date-filter">Date Range</Label>
+          <Popover open={isDatePickerOpen} onOpenChange={(open) => {
+            setIsDatePickerOpen(open)
+            if (open) {
+              setPendingDateFilter(dateFilter)
+              setPendingCustomDateRange(customDateRange)
+            }
+          }}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="w-full justify-between text-left font-normal bg-white">
+                <div className="flex items-center min-w-0 flex-1">
+                  <CalendarIcon className="mr-2 h-4 w-4 text-gray-500 flex-shrink-0" />
+                  <span className="text-gray-700 truncate">
+                    {dateFilter === 'all' && 'All time'}
+                    {dateFilter === 'today' && format(new Date(), "MMM. do yyyy")}
+                    {dateFilter === 'yesterday' && format(subDays(new Date(), 1), "MMM. do yyyy")}
+                    {dateFilter === 'week' && `${format(subDays(new Date(), 7), "MMM. do yyyy")} → ${format(new Date(), "MMM. do yyyy")}`}
+                    {dateFilter === 'month' && `${format(subMonths(new Date(), 1), "MMM. do yyyy")} → ${format(new Date(), "MMM. do yyyy")}`}
+                    {dateFilter === 'quarter' && `${format(subMonths(new Date(), 3), "MMM. do yyyy")} → ${format(new Date(), "MMM. do yyyy")}`}
+                    {dateFilter === 'custom' && customDateRange?.from && (
+                      customDateRange?.to ? (
+                        `${format(customDateRange.from, "MMM. do yyyy")} → ${format(customDateRange.to, "MMM. do yyyy")}`
+                      ) : (
+                        format(customDateRange.from, "MMM. do yyyy")
+                      )
+                    )}
+                  </span>
+                </div>
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[var(--radix-popover-trigger-width)] min-w-full p-0 bg-white shadow-lg border" align="start" sideOffset={4}>
+              <div className="flex max-w-full" style={{ justifyContent: 'space-between' }}>
+                {/* Suggestions */}
+                <div className="w-40 sm:w-60 bg-gray-50 p-2 sm:p-4">
+                  <h3 className="text-xs sm:text-sm font-medium text-gray-900 mb-2 sm:mb-3">Suggestions</h3>
+                  <div className="space-y-1">
+                    {pendingDateFilter === 'custom' && pendingCustomDateRange?.from && (
+                      <div className="w-full justify-between text-left px-2 sm:px-3 py-1 sm:py-2 bg-gray-200 rounded">
+                        <span className="text-black font-medium text-xs sm:text-sm">Custom range</span>
+                        <span className="text-gray-500 text-xs block">
+                          {pendingCustomDateRange?.to ? (
+                            `${format(pendingCustomDateRange.from, "dd MMM")} - ${format(pendingCustomDateRange.to, "dd MMM yy")}`
+                          ) : (
+                            format(pendingCustomDateRange.from, "dd MMM yy")
+                          )}
+                        </span>
+                      </div>
+                    )}
+                    {/* Preset buttons */}
+                    {['today','yesterday','week','month','quarter'].map(preset => (
+                      <Button
+                        key={preset}
+                        variant="ghost"
+                        size="sm"
+                        className={`w-full justify-start text-left hover:bg-gray-100 px-2 sm:px-3 py-1 sm:py-2 h-auto text-xs sm:text-sm ${pendingDateFilter === preset ? 'bg-gray-200' : ''}`}
+                        onClick={() => setDatePreset(preset)}
+                      >
+                        <span className={`${pendingDateFilter === preset ? 'text-black font-medium' : 'text-gray-700'}`}>{preset.charAt(0).toUpperCase()+preset.slice(1)}</span>
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+                {/* Calendar */}
+                <div className="flex-1 min-w-0 p-2 sm:p-4 overflow-hidden">
+                  <div className="w-full" style={{ width: '100%' }}>
+                    <CalendarComponent
+                      mode="range"
+                      defaultMonth={pendingCustomDateRange?.from}
+                      selected={pendingCustomDateRange}
+                      onSelect={(range) => {
+                        setPendingCustomDateRange(range)
+                        if (range?.from || range?.to) {
+                          setPendingDateFilter('custom')
+                        }
+                      }}
+                      numberOfMonths={1}
+                      className="rounded-md border-0 w-full p-0 text-xs sm:text-sm"
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                  {/* Buttons */}
+                  <div className="flex justify-between mt-2 sm:mt-4 gap-1 sm:gap-2">
+                    <Button variant="outline" size="sm" className="flex-1 text-xs sm:text-sm" onClick={() => {
+                      setPendingDateFilter(dateFilter)
+                      setPendingCustomDateRange(customDateRange)
+                      setIsDatePickerOpen(false)
+                    }}>Cancel</Button>
+                    <Button size="sm" className="bg-black hover:bg-gray-800 text-white flex-1 text-xs sm:text-sm" onClick={() => {
+                      setDateFilter(pendingDateFilter)
+                      setCustomDateRange(pendingCustomDateRange)
+                      setIsDatePickerOpen(false)
+                    }}>Apply</Button>
+                  </div>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
+
+        {/* Status Filter and Rows per page - side by side on small screens */}
+        <div className="col-span-1 md:col-span-6 grid grid-cols-2 gap-4">
+          {/* Status Filter */}
+          <div className="space-y-2">
+            <Label>Status</Label>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="w-full justify-between text-left font-normal bg-white">
+                  <div className="flex items-center min-w-0 flex-1">
+                    <Filter className="mr-2 h-4 w-4 text-gray-500 flex-shrink-0" />
+                    <span className="text-gray-700 truncate">Status</span>
+                  </div>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>Filter by Status</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {['completed','returned','partially returned'].map(stat => (
+                  <DropdownMenuCheckboxItem
+                    key={stat}
+                    checked={selectedStatuses.includes(stat)}
+                    onCheckedChange={(checked) => {
+                      if (checked) {
+                        setSelectedStatuses([...selectedStatuses, stat])
+                      } else {
+                        setSelectedStatuses(selectedStatuses.filter(s => s !== stat))
+                      }
+                    }}
+                  >
+                    {stat.charAt(0).toUpperCase()+stat.slice(1)}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
+          {/* Rows per page */}
+          <div className="space-y-2">
+            <Label>Rows</Label>
+            <Select value={itemsPerPage.toString()} onValueChange={(value) => {
+              setItemsPerPage(parseInt(value))
+              setCurrentPage(1)
+            }}>
+              <SelectTrigger className="w-full" suppressHydrationWarning>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent suppressHydrationWarning>
+                <SelectItem value="10">10</SelectItem>
+                <SelectItem value="25">25</SelectItem>
+                <SelectItem value="50">50</SelectItem>
+                <SelectItem value="100">100</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
       </div>
 
       {/* Sales Table */}
       <Card suppressHydrationWarning>
-        {/* Mobile Card Layout for very small screens */}
-        <div className="block sm:hidden">
+        {/* Mobile Card Layout for small and medium screens */}
+        <div className="block lg:hidden">
           <div className="space-y-4 p-4">
             {currentSales.length > 0 ? (
               currentSales.map((sale) => (
@@ -450,7 +635,8 @@ export default function SalesPage() {
                         <Button 
                           variant="ghost" 
                           size="sm" 
-                          className="bg-black hover:bg-gray-800 text-white hover:text-white"
+                          style={{ backgroundColor: 'black', color: 'white' }}
+                          className="hover:bg-gray-800"
                           suppressHydrationWarning
                         >
                           <MoreHorizontal className="h-4 w-4" />
@@ -485,7 +671,7 @@ export default function SalesPage() {
                     </DropdownMenu>
                   </div>
                   
-                  <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
                     <div>
                       <div className="text-muted-foreground mb-1">Customer</div>
                       <div className="flex items-center space-x-1">
@@ -512,15 +698,19 @@ export default function SalesPage() {
                       </div>
                     </div>
                     
-                    <div className="col-span-2">
+                    <div className="col-span-2 md:col-span-3">
                       <div className="text-muted-foreground mb-1">Status</div>
                       <Badge className={`flex items-center gap-1 w-fit ${getStatusColor(sale.status || '')}`}>
-                        {getStatusIcon(sale.status || '')}
+                        {sale.status === 'completed' ? (
+                          <CheckCircle className="h-4 w-4 text-green-700" />
+                        ) : (
+                          getStatusIcon(sale.status || '')
+                        )}
                         {sale.status}
                       </Badge>
                     </div>
                     
-                    <div className="col-span-2">
+                    <div className="col-span-2 md:col-span-3">
                       <div className="text-muted-foreground mb-1">Salesperson</div>
                       <div className="truncate">{sale.salesperson}</div>
                     </div>
@@ -535,8 +725,8 @@ export default function SalesPage() {
           </div>
         </div>
 
-        {/* Table Layout for small screens and up */}
-        <div className="hidden sm:block overflow-auto">
+        {/* Table Layout for large screens and up */}
+        <div className="hidden lg:block overflow-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -575,7 +765,11 @@ export default function SalesPage() {
                     </TableCell>
                     <TableCell>
                       <Badge className={`flex items-center gap-1 w-fit ${getStatusColor(sale.status || '')}`}>
-                        {getStatusIcon(sale.status || '')}
+                        {sale.status === 'completed' ? (
+                          <CheckCircle className="h-4 w-4 text-green-700" />
+                        ) : (
+                          getStatusIcon(sale.status || '')
+                        )}
                         {sale.status}
                       </Badge>
                     </TableCell>
@@ -585,7 +779,8 @@ export default function SalesPage() {
                       <DropdownMenuTrigger asChild>
                         <Button 
                           variant="ghost" 
-                          className="h-8 w-8 p-0 bg-black hover:bg-gray-800 text-white hover:text-white"
+                          className="h-8 w-8 p-0 text-white hover:bg-gray-800"
+                          style={{ backgroundColor: 'black' }}
                           suppressHydrationWarning
                         >
                           <span className="sr-only">Open menu</span>
@@ -636,29 +831,29 @@ export default function SalesPage() {
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="text-sm text-muted-foreground order-2 sm:order-1">
+        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+          <div className="text-sm text-muted-foreground order-2 md:order-1">
             Showing {startIndex + 1} to {Math.min(endIndex, totalItems)} of{' '}
             {totalItems} sales
           </div>
-          <div className="flex items-center space-x-2 order-1 sm:order-2">
+          <div className="flex items-center space-x-2 order-1 md:order-2">
             <Button
               variant="outline"
               size="sm"
               onClick={() => setCurrentPage(currentPage - 1)}
               disabled={currentPage === 1}
               suppressHydrationWarning
-              className="px-2 sm:px-3"
+              className="px-2 md:px-3"
             >
               <ChevronLeft className="h-4 w-4" />
-              <span className="hidden sm:inline ml-1">Previous</span>
+              <span className="hidden md:inline ml-1">Previous</span>
             </Button>
             <div className="flex items-center space-x-1">
               {Array.from({ length: totalPages }, (_, i) => i + 1)
                 .filter((page) => {
                   const showPage = page === 1 || page === totalPages || (page >= currentPage - 1 && page <= currentPage + 1);
-                  // On mobile, show fewer pages
-                  if (typeof window !== 'undefined' && window.innerWidth < 640) {
+                  // On mobile and tablet, show fewer pages
+                  if (typeof window !== 'undefined' && window.innerWidth < 1024) {
                     return page === currentPage || page === 1 || page === totalPages;
                   }
                   return showPage;
@@ -666,7 +861,7 @@ export default function SalesPage() {
                 .map((page, index, array) => (
                   <React.Fragment key={page}>
                     {index > 0 && array[index - 1] !== page - 1 && (
-                      <span className="px-1 sm:px-2 text-muted-foreground text-sm">...</span>
+                      <span className="px-1 md:px-2 text-muted-foreground text-sm">...</span>
                     )}
                     <Button
                       variant={currentPage === page ? "default" : "outline"}
@@ -686,9 +881,9 @@ export default function SalesPage() {
               onClick={() => setCurrentPage(currentPage + 1)}
               disabled={currentPage === totalPages}
               suppressHydrationWarning
-              className="px-2 sm:px-3"
+              className="px-2 md:px-3"
             >
-              <span className="hidden sm:inline mr-1">Next</span>
+              <span className="hidden md:inline mr-1">Next</span>
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>

@@ -51,6 +51,7 @@ import {
 // Import real Supabase functions
 import { getPackagingByWarehouse, createSale } from '@/lib/supabase/sales-client'
 import { invalidateSalesCache } from '@/lib/hooks/useSalesData'
+import { useCurrentUser } from '@/hooks/useCurrentUser'
 
 // Payment methods
 const paymentMethods = [
@@ -931,6 +932,7 @@ interface AddSaleProps {
 }
 
 export default function AddSale({ editMode, existingSale, saleId }: AddSaleProps) {
+  const { user } = useCurrentUser()
   // Use the optimized data hook instead of duplicated loading logic
   const {
     customers,
@@ -980,7 +982,7 @@ export default function AddSale({ editMode, existingSale, saleId }: AddSaleProps
         warehouse_id: saleData.warehouseId,
         warehouse_name: warehouse?.name || 'Unknown Warehouse',
         sale_date: saleData.saleDate,
-        salesperson: 'System User', // TODO: Add user management to get actual salesperson
+        salesperson: user?.name || 'System User',
         subtotal: totals.subtotal,
         after_discount: totals.subtotal - totals.totalDiscountAmount,
         total_discount: totals.totalDiscountAmount,
