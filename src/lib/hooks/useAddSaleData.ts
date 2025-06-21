@@ -1,14 +1,18 @@
 import * as React from 'react'
 import { getCustomers, getWarehouses, getProducts, getProductsByWarehouse, type Customer } from '@/lib/supabase/sales-client'
+import { getPaymentMethodAccounts } from '@/lib/supabase/accounts-client'
+import type { AccountWithCategory } from '@/lib/supabase/types'
 
 export function useAddSaleData() {
   const [customers, setCustomers] = React.useState<Customer[]>([])
   const [warehouses, setWarehouses] = React.useState<any[]>([])
   const [products, setProducts] = React.useState<any[]>([])
+  const [paymentMethodAccounts, setPaymentMethodAccounts] = React.useState<AccountWithCategory[]>([])
   const [loadingCustomers, setLoadingCustomers] = React.useState(true)
   const [loadingWarehouses, setLoadingWarehouses] = React.useState(true)
   const [loadingProducts, setLoadingProducts] = React.useState(true)
-  const [errors, setErrors] = React.useState<{ customers?: string; warehouses?: string; products?: string }>({})
+  const [loadingPaymentMethods, setLoadingPaymentMethods] = React.useState(true)
+  const [errors, setErrors] = React.useState<{ customers?: string; warehouses?: string; products?: string; paymentMethods?: string }>({})
 
   // Load customers
   const loadCustomers = React.useCallback(async () => {
@@ -60,14 +64,32 @@ export function useAddSaleData() {
     }
   }, [])
 
+  // Load payment method accounts
+  const loadPaymentMethods = React.useCallback(async () => {
+    console.log('💳 Loading payment method accounts...')
+    setLoadingPaymentMethods(true)
+
+    try {
+      const data = await getPaymentMethodAccounts()
+      setPaymentMethodAccounts(data)
+      console.log('✅ Payment method accounts loaded:', data.length)
+    } catch (error) {
+      console.error('❌ Error loading payment method accounts:', error)
+      setErrors(prev => ({ ...prev, paymentMethods: 'Failed to load payment methods' }))
+    } finally {
+      setLoadingPaymentMethods(false)
+    }
+  }, [])
+
   // Initial data load
   React.useEffect(() => {
     Promise.all([
       loadCustomers(),
       loadWarehouses(),
-      loadInitialProducts()
+      loadInitialProducts(),
+      loadPaymentMethods()
     ])
-  }, [loadCustomers, loadWarehouses, loadInitialProducts])
+  }, [loadCustomers, loadWarehouses, loadInitialProducts, loadPaymentMethods])
 
   // Load products for specific warehouse
   const loadProducts = React.useCallback(async (warehouseId?: string) => {
@@ -91,17 +113,20 @@ export function useAddSaleData() {
     Promise.all([
       loadCustomers(),
       loadWarehouses(),
-      loadInitialProducts()
+      loadInitialProducts(),
+      loadPaymentMethods()
     ])
-  }, [loadCustomers, loadWarehouses, loadInitialProducts])
+  }, [loadCustomers, loadWarehouses, loadInitialProducts, loadPaymentMethods])
 
   return {
     customers,
     warehouses,
     products,
+    paymentMethodAccounts,
     loadingCustomers,
     loadingWarehouses,
     loadingProducts,
+    loadingPaymentMethods,
     errors,
     loadProducts,
     clearCache
