@@ -990,6 +990,27 @@ if (typeof window !== 'undefined') {
     }
   }
 
+  // Test basic connectivity to Supabase
+  (window as any).testSupabaseConnectivity = async () => {
+    console.log('🌐 [testSupabaseConnectivity] Testing basic connectivity...')
+    try {
+      const supabase = createClient()
+      
+      console.log('🔍 [testSupabaseConnectivity] Testing auth status...')
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+      console.log('Session result:', { hasSession: Boolean(session), error: sessionError })
+      
+      console.log('🔍 [testSupabaseConnectivity] Testing simple query...')
+      const { data, error } = await supabase.from('activity_logs').select('count').limit(1)
+      console.log('Simple query result:', { data, error })
+      
+      return { session: Boolean(session), queryWorked: !error, error }
+    } catch (err) {
+      console.error('❌ [testSupabaseConnectivity] Exception:', err)
+      return { error: err }
+    }
+  }
+
   // Force clear cache and abort any in-flight requests
   (window as any).clearRecentActivitiesCache = () => {
     console.log('🗑️ [clearRecentActivitiesCache] Force clearing cache...')
@@ -1046,12 +1067,26 @@ export async function getRecentActivities(limit: number = 100): Promise<any[]> {
         (async () => {
           console.log('🚀 [getRecentActivities] Creating Supabase client...')
           const supabase = createClient()
+          
+          // Log client configuration
+          console.log('🔧 [getRecentActivities] Supabase client created, checking auth...')
+          const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+          console.log('🔑 [getRecentActivities] Session check:', {
+            hasSession: Boolean(session),
+            userId: session?.user?.id,
+            sessionError: sessionError?.message
+          })
+          
           console.log('📡 [getRecentActivities] Making RPC call to get_recent_activities...')
           
           const startTime = Date.now()
-          const { data, error } = await supabase.rpc('get_recent_activities', {
+          console.log('🌐 [getRecentActivities] About to call supabase.rpc...')
+          const rpcResult = supabase.rpc('get_recent_activities', {
             p_limit: limit
           }).abortSignal(abortController.signal)
+          
+          console.log('🎯 [getRecentActivities] RPC query created, awaiting result...')
+          const { data, error } = await rpcResult
           const endTime = Date.now()
           console.log(`📊 [getRecentActivities] RPC completed in ${endTime - startTime}ms`)
 
