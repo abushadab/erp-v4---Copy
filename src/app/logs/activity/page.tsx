@@ -60,6 +60,26 @@ export default function ActivityLogsPage() {
   const loadingRef = React.useRef(false)
   const dataLoadedRef = React.useRef(false)
 
+  // Expose debug helper for the Activity page cache
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).debugActivityPageCache = () => {
+        const now = Date.now()
+        console.log('[debugActivityPageCache] Current time:', new Date(now).toISOString())
+        console.table({
+          hasData: Boolean(activityDataCache.activities.length > 0),
+          dataLength: activityDataCache.activities.length,
+          ageMs: now - activityDataCache.lastFetch,
+          requestInFlight: Boolean(activityDataCache.currentRequest),
+          loadingRefCurrent: loadingRef.current,
+          dataLoadedRefCurrent: dataLoadedRef.current,
+          componentLoading: loading
+        })
+        return activityDataCache
+      }
+    }
+  }, [loading])
+
   // Load activities with deduplication
   const loadActivitiesWithDeduplication = React.useCallback(async (forceRefresh = false) => {
     const now = Date.now()
@@ -111,6 +131,12 @@ export default function ActivityLogsPage() {
           // Use the cached query function to get real database data
           const data = await getRecentActivities(100)
           
+          // If we get an empty result but we have cached data, keep the cached data
+          if ((!data || data.length === 0) && activityDataCache.activities.length > 0) {
+            console.warn('⚠️ [ActivityPage] getRecentActivities returned empty, keeping cached data')
+            return activityDataCache.activities
+          }
+          
           // Transform the database result to match our interface
           const transformedActivities: ActivityLog[] = data?.map((activity: any) => ({
             id: activity.id,
@@ -127,7 +153,11 @@ export default function ActivityLogsPage() {
           return transformedActivities
         } catch (error) {
           console.error('Error loading activities:', error)
-          // Return empty array instead of sample data on error
+          // If we have cached data, return it; otherwise empty array
+          if (activityDataCache.activities.length > 0) {
+            console.warn('⚠️ [ActivityPage] Error loading activities, keeping cached data')
+            return activityDataCache.activities
+          }
           return []
         }
       }
