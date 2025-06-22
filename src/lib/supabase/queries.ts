@@ -949,6 +949,7 @@ const recentActivitiesCache = {
   data: null as any[] | null,
   timestamp: 0,
   promise: null as Promise<any[]> | null,
+  abortController: null as AbortController | null,
   CACHE_DURATION: 30000 // 30 seconds
 }
 
@@ -988,6 +989,20 @@ if (typeof window !== 'undefined') {
       return { success: false, error: err }
     }
   }
+
+  // Force clear cache and abort any in-flight requests
+  (window as any).clearRecentActivitiesCache = () => {
+    console.log('🗑️ [clearRecentActivitiesCache] Force clearing cache...')
+    if (recentActivitiesCache.abortController) {
+      console.log('🚫 [clearRecentActivitiesCache] Aborting in-flight request')
+      recentActivitiesCache.abortController.abort()
+    }
+    recentActivitiesCache.data = null
+    recentActivitiesCache.timestamp = 0
+    recentActivitiesCache.promise = null
+    recentActivitiesCache.abortController = null
+    console.log('✅ [clearRecentActivitiesCache] Cache cleared completely')
+  }
 }
 
 // Activity queries with request deduplication
@@ -1008,10 +1023,20 @@ export async function getRecentActivities(limit: number = 100): Promise<any[]> {
     return recentActivitiesCache.promise
   }
   
+  // Cancel any previous stuck request
+  if (recentActivitiesCache.abortController) {
+    console.log('🚫 [getRecentActivities] Aborting previous stuck request')
+    recentActivitiesCache.abortController.abort()
+  }
+  
   console.log('🔄 [getRecentActivities] Fetching fresh data…')
   
-  const TIMEOUT_MS = 10_000 // 10 s cap
+  const TIMEOUT_MS = 10_000 // 10 s cap
   const start = Date.now()
+  
+  // Create new AbortController for this request
+  recentActivitiesCache.abortController = new AbortController()
+  const abortController = recentActivitiesCache.abortController
   
   // --- NEW PROMISE WITH HARD TIME-OUT (avoids stuck skeleton) ---
   recentActivitiesCache.promise = (async (): Promise<any[]> => {
@@ -1026,7 +1051,7 @@ export async function getRecentActivities(limit: number = 100): Promise<any[]> {
           const startTime = Date.now()
           const { data, error } = await supabase.rpc('get_recent_activities', {
             p_limit: limit
-          })
+          }).abortSignal(abortController.signal)
           const endTime = Date.now()
           console.log(`📊 [getRecentActivities] RPC completed in ${endTime - startTime}ms`)
 
@@ -1041,6 +1066,7 @@ export async function getRecentActivities(limit: number = 100): Promise<any[]> {
         new Promise<never>((_, reject) =>
           setTimeout(() => {
             console.log('⏰ [getRecentActivities] Hard timeout reached after 10s')
+            abortController.abort() // Cancel the RPC request
             reject(new Error('Timeout after 10 s'))
           }, TIMEOUT_MS)
         )
@@ -1061,6 +1087,7 @@ export async function getRecentActivities(limit: number = 100): Promise<any[]> {
       return []
     } finally {
       recentActivitiesCache.promise = null
+      recentActivitiesCache.abortController = null
       console.log('[getRecentActivities] Promise cleared – ready for next request')
     }
   })()
