@@ -1011,6 +1011,40 @@ if (typeof window !== 'undefined') {
     }
   }
 
+  // Test direct RPC call without any auth checks
+  (window as any).testDirectRPC = async () => {
+    console.log('🚀 [testDirectRPC] Testing direct RPC call...')
+    try {
+      // Create a fresh client instance
+      const supabase = createClient()
+      
+      console.log('📡 [testDirectRPC] Making direct RPC call...')
+      const startTime = Date.now()
+      
+      // Make RPC call with timeout
+      const { data, error } = await Promise.race([
+        supabase.rpc('get_recent_activities', { p_limit: 3 }),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Direct RPC timeout after 5s')), 5000)
+        )
+      ])
+      
+      const endTime = Date.now()
+      console.log(`⏰ [testDirectRPC] Completed in ${endTime - startTime}ms`)
+      
+      if (error) {
+        console.error('❌ [testDirectRPC] RPC error:', error)
+        return { success: false, error, duration: endTime - startTime }
+      }
+      
+      console.log('✅ [testDirectRPC] Success:', data)
+      return { success: true, data, count: data?.length, duration: endTime - startTime }
+    } catch (err) {
+      console.error('❌ [testDirectRPC] Exception:', err)
+      return { success: false, error: err }
+    }
+  }
+
   // Force clear cache and abort any in-flight requests
   (window as any).clearRecentActivitiesCache = () => {
     console.log('🗑️ [clearRecentActivitiesCache] Force clearing cache...')
@@ -1068,22 +1102,7 @@ export async function getRecentActivities(limit: number = 100): Promise<any[]> {
           console.log('🚀 [getRecentActivities] Creating Supabase client...')
           const supabase = createClient()
           
-          // Log client configuration
-          console.log('🔧 [getRecentActivities] Supabase client created, checking auth...')
-          
-          // Non-blocking session check with timeout
-          Promise.race([
-            supabase.auth.getSession(),
-            new Promise(resolve => setTimeout(() => resolve({ data: { session: null }, error: { message: 'Session check timeout' } }), 2000))
-          ]).then(({ data: { session }, error: sessionError }) => {
-            console.log('🔑 [getRecentActivities] Session check:', {
-              hasSession: Boolean(session),
-              userId: session?.user?.id,
-              sessionError: sessionError?.message
-            })
-          }).catch(err => {
-            console.warn('⚠️ [getRecentActivities] Session check failed:', err)
-          })
+          console.log('🔧 [getRecentActivities] Supabase client created, skipping auth check...')
           
           console.log('📡 [getRecentActivities] Making RPC call to get_recent_activities...')
           
