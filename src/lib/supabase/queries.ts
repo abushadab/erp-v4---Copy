@@ -952,54 +952,82 @@ const recentActivitiesCache = {
   CACHE_DURATION: 30000 // 30 seconds
 }
 
+// Expose simple debug helper in the browser console
+if (typeof window !== 'undefined') {
+  (window as any).debugRecentActivitiesCache = () => {
+    const now = Date.now()
+    console.log('[debugRecentActivitiesCache] Current time:', new Date(now).toISOString())
+    console.table({
+      hasData: Boolean(recentActivitiesCache.data),
+      dataLength: recentActivitiesCache.data?.length ?? 0,
+      ageMs: now - recentActivitiesCache.timestamp,
+      promiseInFlight: Boolean(recentActivitiesCache.promise)
+    })
+    return recentActivitiesCache
+  }
+}
+
 // Activity queries with request deduplication
 export async function getRecentActivities(limit: number = 100): Promise<any[]> {
   const now = Date.now()
   
   // Return cached data if fresh
   if (recentActivitiesCache.data && (now - recentActivitiesCache.timestamp) < recentActivitiesCache.CACHE_DURATION) {
-    console.log('📋 getRecentActivities() - Using cached data')
+    console.log(
+      `📋 [getRecentActivities] Serving from cache. Age: ${now - recentActivitiesCache.timestamp} ms, Size: ${recentActivitiesCache.data.length}`
+    )
     return recentActivitiesCache.data
   }
   
   // If there's already a request in progress, return it
   if (recentActivitiesCache.promise) {
-    console.log('⏳ getRecentActivities() - Request already in progress, waiting...')
+    console.log('⏳ [getRecentActivities] Awaiting in-flight request…')
     return recentActivitiesCache.promise
   }
   
-  console.log('🔄 getRecentActivities() - Fetching fresh data')
+  console.log('🔄 [getRecentActivities] Fetching fresh data…')
   
-  // Create new request with timeout
+  const TIMEOUT_MS = 10_000 // 10 s cap
+  const start = Date.now()
+  
+  // --- NEW PROMISE WITH HARD TIME-OUT (avoids stuck skeleton) ---
   recentActivitiesCache.promise = (async (): Promise<any[]> => {
-    const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
-    
     try {
-      const supabase = createClient()
-      const { data, error } = await supabase.rpc('get_recent_activities', {
-        p_limit: limit
-      }).abortSignal(controller.signal)
+      // Run Supabase RPC and timeout in parallel – whichever resolves first wins
+      const result = await Promise.race([
+        (async () => {
+          const supabase = createClient()
+          const { data, error } = await supabase.rpc('get_recent_activities', {
+            p_limit: limit
+          })
 
-      if (error) {
-        console.error('Error fetching recent activities:', error)
-        throw new Error('Failed to fetch recent activities')
-      }
+          if (error) {
+            console.error('Error fetching recent activities:', error)
+            throw new Error('Failed to fetch recent activities')
+          }
+          return data || []
+        })(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Timeout after 10 s')), TIMEOUT_MS)
+        )
+      ]) as any[]
 
-      const result = data || []
-
-      // Update cache with result
+      // Cache successful result
       recentActivitiesCache.data = result
       recentActivitiesCache.timestamp = now
-
+      console.log(`✅ [getRecentActivities] Success – ${result.length} rows in ${Date.now() - start} ms`)
       return result
     } catch (error) {
-      console.error('❌ Error in getRecentActivities():', error)
-      // Return empty array as fallback
+      console.error('❌ [getRecentActivities] Error/Timeout after', Date.now() - start, 'ms :', error)
+      // If we have stale cache, return it so UI is not stuck
+      if (recentActivitiesCache.data) {
+        console.warn('⚠️ [getRecentActivities] Returning stale activity data due to error/timeout')
+        return recentActivitiesCache.data
+      }
       return []
     } finally {
-      clearTimeout(timeoutId)
       recentActivitiesCache.promise = null
+      console.log('[getRecentActivities] Promise cleared – ready for next request')
     }
   })()
 
