@@ -965,6 +965,29 @@ if (typeof window !== 'undefined') {
     })
     return recentActivitiesCache
   }
+
+  // Test the RPC function directly
+  (window as any).testRecentActivitiesRPC = async () => {
+    console.log('🧪 [testRecentActivitiesRPC] Testing RPC function directly...')
+    try {
+      const supabase = createClient()
+      console.log('🔑 [testRecentActivitiesRPC] Supabase client created')
+      
+      // Test with a small limit first
+      const { data, error } = await supabase.rpc('get_recent_activities', { p_limit: 5 })
+      
+      if (error) {
+        console.error('❌ [testRecentActivitiesRPC] RPC error:', error)
+        return { success: false, error }
+      }
+      
+      console.log('✅ [testRecentActivitiesRPC] RPC success:', data)
+      return { success: true, data, count: data?.length || 0 }
+    } catch (err) {
+      console.error('❌ [testRecentActivitiesRPC] Exception:', err)
+      return { success: false, error: err }
+    }
+  }
 }
 
 // Activity queries with request deduplication
@@ -996,19 +1019,30 @@ export async function getRecentActivities(limit: number = 100): Promise<any[]> {
       // Run Supabase RPC and timeout in parallel – whichever resolves first wins
       const result = await Promise.race([
         (async () => {
+          console.log('🚀 [getRecentActivities] Creating Supabase client...')
           const supabase = createClient()
+          console.log('📡 [getRecentActivities] Making RPC call to get_recent_activities...')
+          
+          const startTime = Date.now()
           const { data, error } = await supabase.rpc('get_recent_activities', {
             p_limit: limit
           })
+          const endTime = Date.now()
+          console.log(`📊 [getRecentActivities] RPC completed in ${endTime - startTime}ms`)
 
           if (error) {
-            console.error('Error fetching recent activities:', error)
+            console.error('❌ [getRecentActivities] RPC error:', error)
             throw new Error('Failed to fetch recent activities')
           }
+          
+          console.log(`📋 [getRecentActivities] RPC success - received ${data?.length || 0} records`)
           return data || []
         })(),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout after 10 s')), TIMEOUT_MS)
+          setTimeout(() => {
+            console.log('⏰ [getRecentActivities] Hard timeout reached after 10s')
+            reject(new Error('Timeout after 10 s'))
+          }, TIMEOUT_MS)
         )
       ]) as any[]
 
