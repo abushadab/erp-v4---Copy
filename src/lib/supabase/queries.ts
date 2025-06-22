@@ -1070,11 +1070,19 @@ export async function getRecentActivities(limit: number = 100): Promise<any[]> {
           
           // Log client configuration
           console.log('🔧 [getRecentActivities] Supabase client created, checking auth...')
-          const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-          console.log('🔑 [getRecentActivities] Session check:', {
-            hasSession: Boolean(session),
-            userId: session?.user?.id,
-            sessionError: sessionError?.message
+          
+          // Non-blocking session check with timeout
+          Promise.race([
+            supabase.auth.getSession(),
+            new Promise(resolve => setTimeout(() => resolve({ data: { session: null }, error: { message: 'Session check timeout' } }), 2000))
+          ]).then(({ data: { session }, error: sessionError }) => {
+            console.log('🔑 [getRecentActivities] Session check:', {
+              hasSession: Boolean(session),
+              userId: session?.user?.id,
+              sessionError: sessionError?.message
+            })
+          }).catch(err => {
+            console.warn('⚠️ [getRecentActivities] Session check failed:', err)
           })
           
           console.log('📡 [getRecentActivities] Making RPC call to get_recent_activities...')
