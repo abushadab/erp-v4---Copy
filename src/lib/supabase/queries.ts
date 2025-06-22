@@ -1104,6 +1104,18 @@ export async function getRecentActivities(limit: number = 100): Promise<any[]> {
           
           console.log('🔧 [getRecentActivities] Supabase client created, skipping auth check...')
           
+          // Proactive session refresh to ensure token is fresh
+          console.log('🔄 [getRecentActivities] Refreshing session for reliable RPC call...')
+          try {
+            await Promise.race([
+              supabase.auth.refreshSession(),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('Session refresh timeout')), 3000))
+            ])
+            console.log('✅ [getRecentActivities] Session refresh completed')
+          } catch (err) {
+            console.warn('⚠️ [getRecentActivities] Session refresh failed, proceeding anyway:', err.message)
+          }
+          
           console.log('📡 [getRecentActivities] Making RPC call to get_recent_activities...')
           
           const startTime = Date.now()
