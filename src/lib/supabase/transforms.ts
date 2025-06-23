@@ -5,7 +5,7 @@ interface DatabaseProductWithStock extends DatabaseProduct {
   stock?: number
   variations?: (DatabaseProductVariation & { stock?: number })[]
 }
-import type { Product, ProductVariation } from '../mock-data/erp-data'
+import type { Product, ProductVariation } from '../types'
 
 /**
  * Transform database product to ERP Product interface

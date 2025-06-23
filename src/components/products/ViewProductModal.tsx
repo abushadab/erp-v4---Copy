@@ -13,7 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Edit, Package, MapPin, Loader2 } from "lucide-react"
-import { type Product } from "@/lib/mock-data/erp-data"
+import { type Product } from "@/lib/types"
 import { getProductStockSummary } from "@/lib/utils/multi-warehouse-stock"
 import { getAttributes, type DatabaseAttribute } from "@/lib/supabase/queries"
 

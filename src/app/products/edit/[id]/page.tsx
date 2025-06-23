@@ -54,7 +54,7 @@ import {
   type CreateAttributeValueData
 } from "@/lib/supabase/mutations"
 import { toast } from "sonner"
-import type { Product, ProductVariation } from "@/lib/mock-data/erp-data"
+import type { Product, ProductVariation } from "@/lib/types"
 
 // Client-side type definitions
 interface DatabaseProduct {

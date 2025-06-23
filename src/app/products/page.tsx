@@ -45,7 +45,7 @@ import {
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { transformDatabaseProductToProduct } from "@/lib/supabase/transforms"
-import type { Product } from "@/lib/mock-data/erp-data"
+import type { Product } from "@/lib/types"
 import { ViewProductModal } from "@/components/products/ViewProductModal"
 import { toast } from "sonner"
 import { getTotalProductStock } from "@/lib/utils/multi-warehouse-stock"

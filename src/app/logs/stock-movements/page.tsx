@@ -23,7 +23,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { type StockMovement } from "@/lib/mock-data/erp-data"
+import { type StockMovement } from "@/lib/types"
 
 export default function StockMovementsPage() {
   const [movements, setMovements] = React.useState<StockMovement[]>([])

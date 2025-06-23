@@ -1,7 +1,7 @@
 import { createClient } from './client'
 import type { Database, Customer, Sale, SaleItem, Return, ReturnItem, SaleWithItems, ReturnWithItems } from './types'
 import { transformDatabaseProductToProduct } from './transforms'
-import type { Product, ProductVariation, Packaging, PackagingVariation } from '../mock-data/erp-data'
+import type { Product, ProductVariation, Packaging, PackagingVariation } from '../types'
 import { createSaleJournalEntry, createReturnJournalEntry } from './accounts-client'
 import { apiCache } from './cache'
 

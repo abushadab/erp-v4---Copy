@@ -38,7 +38,7 @@ import { Switch } from '@/components/ui/switch'
 import { createCustomer, type Customer } from '@/lib/supabase/sales-client'
 import { useAddSaleData } from '@/lib/hooks/useAddSaleData'
 
-// Import types from mock data but use real Supabase functions for data
+// Import types
 import { 
   type Warehouse, 
   type Product, 
@@ -46,7 +46,7 @@ import {
   type Sale,
   type Packaging,
   type PackagingVariation
-} from '@/lib/mock-data/erp-data'
+} from '@/lib/types'
 
 // Import real Supabase functions
 import { getPackagingByWarehouse, createSale } from '@/lib/supabase/sales-client'

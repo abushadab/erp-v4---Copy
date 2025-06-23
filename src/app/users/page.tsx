@@ -56,7 +56,7 @@ import {
   Eye,
   Edit
 } from "lucide-react"
-import { type User as UserType } from "@/lib/mock-data/erp-data"
+import { type User as UserType } from "@/lib/types"
 import { getAllUsersWithRoles, createUserProfile, updateUserProfile, assignRoleToUser, removeRoleFromUser, getUserWithPermissions } from "@/lib/supabase/users"
 import { createClient } from '@/lib/supabase/client'
 import type { ExtendedUser } from "@/lib/types/supabase-types"
