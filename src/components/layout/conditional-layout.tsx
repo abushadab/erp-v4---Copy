@@ -7,7 +7,7 @@ interface ConditionalLayoutProps {
   children: React.ReactNode
 }
 
-const authRoutes = ['/login', '/signup', '/auth', '/reset-password', '/verify-email']
+const authRoutes = ['/login', '/signup', '/auth', '/reset-password', '/verify-email', '/forgot-password', '/update-password']
 
 export function ConditionalLayout({ children }: ConditionalLayoutProps) {
   const pathname = usePathname()

@@ -148,6 +148,15 @@ export default function LoginPage() {
           >
             {isLoading ? 'Creating account...' : 'Create Account'}
           </Button>
+          <Button
+            variant="link"
+            onClick={() => router.push('/forgot-password')}
+            className="w-full p-0 text-center text-sm"
+            disabled={isLoading}
+            suppressHydrationWarning
+          >
+            Forgot password?
+          </Button>
         </CardFooter>
       </Card>
     </div>
