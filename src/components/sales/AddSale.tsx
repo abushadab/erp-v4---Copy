@@ -61,9 +61,10 @@ import {
 import { useCartManagement, type DiscountType, type SaleItem, type CartItem } from '@/hooks/sales/useCartManagement'
 
 // Import real Supabase functions
-import { getPackagingByWarehouse, createSale } from '@/lib/supabase/sales-client'
-import { invalidateSalesCache } from '@/lib/hooks/useSalesData'
-import { useCurrentUser } from '@/hooks/useCurrentUser'
+import { getPackagingByWarehouse } from '@/lib/supabase/sales-client'
+
+// Import sale submission hook
+import { useSaleSubmission } from '@/hooks/sales/useSaleSubmission'
 
 // Payment methods - now loaded from accounts marked as payment methods
 
@@ -91,14 +92,6 @@ type SaleFormData = z.infer<typeof saleSchema>
 
 // SaleItem and CartItem interfaces are now imported from the hook
 
-interface SaleResult {
-  success: boolean
-  message: string
-  saleId?: string
-  revenue?: number
-  profit?: number
-  items?: CartItem[]
-}
 
 
 
@@ -116,7 +109,6 @@ interface AddSaleProps {
 }
 
 export default function AddSale({ editMode, existingSale, saleId }: AddSaleProps) {
-  const { user } = useCurrentUser()
   // Use the optimized data hook instead of duplicated loading logic
   const {
     customers,
@@ -132,145 +124,21 @@ export default function AddSale({ editMode, existingSale, saleId }: AddSaleProps
     clearCache
   } = useAddSaleData()
 
-  // Real sales function using Supabase
-  const addSale = async (saleData: SaleFormData, cartItems: CartItem[], totals: {
-    subtotal: number;
-    totalDiscountAmount: number;
-    taxAmount: number;
-    grandTotal: number;
-  }): Promise<SaleResult> => {
-    try {
-      console.log('🔄 Creating sale with data:', { saleData, cartItems, totals })
-
-      // Check stock availability first
-      for (const cartItem of cartItems) {
-        const availableStock = cartItem.variation ? cartItem.variation.stock : cartItem.product.stock || 0
-
-        if (cartItem.quantity > availableStock) {
-          const itemName = cartItem.variation 
-            ? `${cartItem.product.name} (${cartItem.variation.sku})`
-            : cartItem.product.name
-          return {
-            success: false,
-            message: `Insufficient stock for ${itemName}. Available: ${availableStock}`
-          }
-        }
-      }
-
-      // Get customer and warehouse details for required fields
-      const customer = customers.find((c: any) => c.id === saleData.customerId)
-      const warehouse = warehouses.find((w: any) => w.id === saleData.warehouseId)
-
-      // Prepare sale record
-      const saleRecord = {
-        customer_id: saleData.customerId,
-        customer_name: customer?.name || 'Unknown Customer',
-        warehouse_id: saleData.warehouseId,
-        warehouse_name: warehouse?.name || 'Unknown Warehouse',
-        sale_date: saleData.saleDate,
-        salesperson: user?.name || 'System User',
-        subtotal: totals.subtotal,
-        after_discount: totals.subtotal - totals.totalDiscountAmount,
-        total_discount: totals.totalDiscountAmount,
-        total_discount_type: saleData.totalDiscountType,
-        tax_rate: saleData.taxRate,
-        tax_amount: totals.taxAmount,
-        total_amount: totals.grandTotal,
-        status: 'completed'
-      }
-
-      // Check for duplicate cart items
-      console.log('🛒 Cart items before processing:', cartItems.map(item => ({
-        productId: item.productId,
-        variationId: item.variationId,
-        packagingId: item.packagingId,
-        packagingVariationId: item.packagingVariationId,
-        quantity: item.quantity
-      })))
-
-      // Remove potential duplicates (safeguard)
-      const uniqueCartItems = cartItems.filter((item, index, self) => 
-        index === self.findIndex(t => (
-          t.productId === item.productId &&
-          t.variationId === item.variationId &&
-          t.packagingId === item.packagingId &&
-          t.packagingVariationId === item.packagingVariationId
-        ))
-      )
-
-      if (uniqueCartItems.length !== cartItems.length) {
-        console.warn('⚠️ Removed duplicate cart items:', cartItems.length - uniqueCartItems.length)
-      }
-
-      // Prepare sale items (now including packaging fields)
-      // Note: We don't include 'id' field - let the database auto-generate it
-      const saleItems = uniqueCartItems.map((item, index) => ({
-        product_id: item.productId,
-        product_name: item.product.name,
-        variation_id: item.variationId || null,
-        packaging_id: item.packagingId,
-        packaging_name: item.packaging.title,
-        packaging_variation_id: item.packagingVariationId || null,
-        quantity: item.quantity,
-        price: item.variation?.price || item.product.price || 0,
-        discount: item.discountAmount,
-        total: item.total,
-        tax: 0 // TODO: Add per-item tax calculation if needed
-      }))
-
-      console.log('📝 Sale record to create:', saleRecord)
-      console.log('📦 Sale items to create:', saleItems)
-      console.log('📊 Number of sale items:', saleItems.length)
-
-      // Create the sale using Supabase
-      const newSale = await createSale(saleRecord, saleItems)
-
-      console.log('✅ Sale created successfully:', newSale)
-
-      // Invalidate sales cache so the sales page shows fresh data
-      invalidateSalesCache()
-
-      // Calculate profit
-      const totalExpense = cartItems.reduce((sum, item) => 
-        sum + ((item.variation ? item.variation.buyingPrice : item.product.buyingPrice || 0) * item.quantity), 0)
-      const profit = totals.grandTotal - totalExpense
-
-      return {
-        success: true,
-        message: `Sale #${newSale.id} completed successfully! Revenue: ৳${totals.grandTotal.toFixed(2)}, Profit: ৳${profit.toFixed(2)}`,
-        saleId: newSale.id,
-        revenue: totals.grandTotal,
-        profit: profit,
-        items: cartItems
-      }
-    } catch (error) {
-      console.error('❌ Error creating sale:', error)
-      console.error('❌ Error details:', JSON.stringify(error, null, 2))
-      
-      let errorMessage = 'Unknown error occurred'
-      
-      if (error instanceof Error) {
-        errorMessage = error.message
-      } else if (typeof error === 'object' && error !== null) {
-        // Handle Supabase errors which might be objects
-        const supabaseError = error as any
-        if (supabaseError.message) {
-          errorMessage = supabaseError.message
-        } else if (supabaseError.details) {
-          errorMessage = supabaseError.details
-        } else if (supabaseError.hint) {
-          errorMessage = supabaseError.hint
-        } else {
-          errorMessage = JSON.stringify(error)
-        }
-      }
-      
-      return {
-        success: false,
-        message: `Failed to complete sale: ${errorMessage}`
-      }
-    }
-  }
+  // Use sale submission hook
+  const {
+    isSubmitting,
+    showSuccess,
+    saleResult,
+    validationAttempted,
+    validateForm,
+    onSubmit,
+    onSubmitError,
+    handleCompleteSale,
+    startNewSale,
+    handleCustomerAdded,
+    showAlert,
+    setValidationAttempted
+  } = useSaleSubmission({ customers, warehouses, clearCache })
 
 
 
@@ -318,9 +186,6 @@ export default function AddSale({ editMode, existingSale, saleId }: AddSaleProps
   }, [selectedWarehouse])
   const [selectedCustomer, setSelectedCustomer] = useState('')
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('')
-  const [showSuccess, setShowSuccess] = useState(false)
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [saleResult, setSaleResult] = useState<SaleResult>({ success: false, message: '' })
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false)
   // Discount and tax state now managed by the cart hook
   const [gridColumns, setGridColumns] = useState(3)
@@ -337,8 +202,6 @@ export default function AddSale({ editMode, existingSale, saleId }: AddSaleProps
   // Discount modal state
   const [showDiscountModal, setShowDiscountModal] = useState(false)
   
-  // Validation attempt state
-  const [validationAttempted, setValidationAttempted] = useState(false)
 
   // Helper function to get attribute value display
   const getAttributeValueDisplay = (attributeId: string, valueId: string) => {
@@ -461,49 +324,8 @@ export default function AddSale({ editMode, existingSale, saleId }: AddSaleProps
     totalItemsInCart
   } = cartManagement
 
-  // Show alert with auto-hide
-  const showAlert = (type: 'success' | 'error', message: string) => {
-    if (type === 'error') {
-      toast.error(message)
-    } else {
-      toast.success(message)
-    }
-  }
-  
-  // Manual validation check
-  const validateForm = () => {
-    setValidationAttempted(true)
-    
-    if (!selectedWarehouse) {
-      showAlert('error', 'Please select a warehouse')
-      return false
-    }
-    
-    if (!selectedCustomer) {
-      showAlert('error', 'Please select a customer')
-      return false
-    }
-    
-    if (!selectedPaymentMethod) {
-      showAlert('error', 'Please select a payment method')
-      return false
-    }
-    
-    if (isCartEmpty) {
-      showAlert('error', 'Please add at least one item to the cart')
-      return false
-    }
-    
-    return true
-  }
-  
   // Handle Complete Sale button click
-  const handleCompleteSale = async () => {
-    if (!validateForm()) {
-      return
-    }
-    
-    // If validation passes, submit the form using the selected date from the form
+  const handleCompleteSaleClick = async () => {
     const formData = {
       warehouseId: selectedWarehouse,
       customerId: selectedCustomer,
@@ -515,15 +337,24 @@ export default function AddSale({ editMode, existingSale, saleId }: AddSaleProps
       taxRate
     }
     
-    await onSubmit(formData)
+    await handleCompleteSale(
+      selectedWarehouse,
+      selectedCustomer,
+      selectedPaymentMethod,
+      isCartEmpty,
+      formData,
+      cartItems,
+      {
+        subtotal,
+        totalDiscountAmount,
+        taxAmount,
+        grandTotal: cartTotal
+      }
+    )
   }
 
-  const handleCustomerAdded = (newCustomer: Customer) => {
-    // Clear cache to force refresh of customers data
-    clearCache()
-    setValue('customerId', newCustomer.id)
-    setSelectedCustomer(newCustomer.id)
-    showAlert('success', `Customer ${newCustomer.name} added successfully!`)
+  const handleCustomerAddedLocal = (newCustomer: Customer) => {
+    handleCustomerAdded(newCustomer, setValue, setSelectedCustomer)
   }
 
   // addToCart function is now provided by the hook
@@ -580,99 +411,15 @@ export default function AddSale({ editMode, existingSale, saleId }: AddSaleProps
     }
   }
 
-  const onSubmit = async (data: SaleFormData) => {
-    try {
-      setIsSubmitting(true)
-      
-      // Check for basic validation before processing
-      if (!data.warehouseId) {
-        showAlert('error', 'Please select a warehouse')
-        window.scrollTo({ top: 0, behavior: 'smooth' })
-        setIsSubmitting(false)
-      return
-    }
-
-      if (!data.customerId) {
-        showAlert('error', 'Please select a customer')
-        window.scrollTo({ top: 0, behavior: 'smooth' })
-        setIsSubmitting(false)
-        return
-      }
-      
-      if (!data.paymentMethod) {
-        showAlert('error', 'Please select a payment method')
-        window.scrollTo({ top: 0, behavior: 'smooth' })
-        setIsSubmitting(false)
-        return
-      }
-      
-      if (isCartEmpty) {
-        showAlert('error', 'Please add at least one item to the cart')
-        setIsSubmitting(false)
-        return
-      }
-      
-      // Prepare data with cart items
-      const saleData = {
-        ...data,
-        items: cart,
-        totalDiscount,
-        totalDiscountType,
-        taxRate
-      }
-
-      const result = await addSale(saleData, cartItems, {
-        subtotal,
-        totalDiscountAmount,
-        taxAmount,
-        grandTotal: cartTotal
-      })
-      
-        setSaleResult(result)
-      
-      if (result.success) {
-        setShowSuccess(true)
-      } else {
-        showAlert('error', result.message)
-      }
-    } catch (error) {
-      showAlert('error', 'An error occurred while processing the sale')
-    } finally {
-      setIsSubmitting(false)
-    }
-  }
-
-  const onSubmitError = (formErrors: any) => {
-    // Show toast notification for validation errors
-    if (formErrors.warehouseId) {
-      showAlert('error', 'Please select a warehouse')
-    } else if (formErrors.customerId) {
-      showAlert('error', 'Please select a customer')
-    } else if (formErrors.paymentMethod) {
-      showAlert('error', 'Please select a payment method')
-    } else if (formErrors.saleDate) {
-      showAlert('error', 'Please select a sale date')
-    } else if (formErrors.items) {
-      showAlert('error', 'Please add at least one item to the cart')
-    } else {
-      showAlert('error', 'Please fill in all required fields')
-    }
-    
-    // Scroll to top to show the alert
-    setTimeout(() => {
-      window.scrollTo({ top: 0, behavior: 'smooth' })
-    }, 100)
-  }
-
-  const startNewSale = () => {
-    setShowSuccess(false)
-    setSaleResult({ success: false, message: '' })
-    clearCart()
-    setSearchTerm('')
-    reset()
-    setSelectedWarehouse('')
-    setSelectedCustomer('')
-    setSelectedPaymentMethod('')
+  const startNewSaleLocal = () => {
+    startNewSale(
+      clearCart,
+      reset,
+      setSelectedWarehouse,
+      setSelectedCustomer,
+      setSelectedPaymentMethod,
+      setSearchTerm
+    )
   }
 
   const printReceipt = () => {
@@ -812,7 +559,7 @@ export default function AddSale({ editMode, existingSale, saleId }: AddSaleProps
             className="space-y-3"
           >
             <Button
-              onClick={startNewSale}
+              onClick={startNewSaleLocal}
               size="lg"
               className="w-full"
             >
@@ -1150,7 +897,12 @@ export default function AddSale({ editMode, existingSale, saleId }: AddSaleProps
               </CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col h-[calc(100%-6rem)] pt-3 pl-6 pr-6">
-              <form onSubmit={handleSubmit(onSubmit, onSubmitError)} className="flex flex-col h-full">
+              <form onSubmit={handleSubmit((data) => onSubmit(data, cartItems, {
+                subtotal,
+                totalDiscountAmount,
+                taxAmount,
+                grandTotal: cartTotal
+              }), onSubmitError)} className="flex flex-col h-full">
                 {/* Cart Items */}
                 {cartItems.length > 0 ? (
                   <>
@@ -1313,7 +1065,7 @@ export default function AddSale({ editMode, existingSale, saleId }: AddSaleProps
                         size="lg"
                         className="w-full"
                         disabled={isCartEmpty || isSubmitting}
-                        onClick={handleCompleteSale}
+                        onClick={handleCompleteSaleClick}
                       >
                         {isSubmitting ? 'Processing...' : 'Complete Sale'}
                       </Button>
@@ -1341,7 +1093,7 @@ export default function AddSale({ editMode, existingSale, saleId }: AddSaleProps
       <AddCustomerModal
         isOpen={showAddCustomerModal}
         onClose={() => setShowAddCustomerModal(false)}
-        onCustomerAdded={handleCustomerAdded}
+        onCustomerAdded={handleCustomerAddedLocal}
       />
 
       {/* Variation Selection Modal */}
