@@ -54,6 +54,7 @@ import {
 } from "lucide-react"
 import { Label } from "@/components/ui/label"
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog"
 import { Calendar as CalendarComponent } from "@/components/ui/calendar"
 import { format, subDays, subMonths } from "date-fns"
 import SalePaymentModal from "@/components/SalePaymentModal"
@@ -84,6 +85,7 @@ export default function SalesPage() {
   const [pendingDateFilter, setPendingDateFilter] = React.useState('all')
   const [pendingCustomDateRange, setPendingCustomDateRange] = React.useState<DateRange | undefined>(undefined)
   const [isDatePickerOpen, setIsDatePickerOpen] = React.useState(false)
+  const [isDateDialogOpen, setIsDateDialogOpen] = React.useState(false)
 
   const setDatePreset = (preset: string) => {
     setPendingDateFilter(preset)
@@ -462,102 +464,259 @@ export default function SalesPage() {
         {/* Date Range */}
         <div className="space-y-2 col-span-1 md:col-span-6">
           <Label htmlFor="date-filter">Date Range</Label>
-          <Popover open={isDatePickerOpen} onOpenChange={(open) => {
-            setIsDatePickerOpen(open)
-            if (open) {
-              setPendingDateFilter(dateFilter)
-              setPendingCustomDateRange(customDateRange)
-            }
-          }}>
-            <PopoverTrigger asChild>
-              <Button variant="outline" className="w-full justify-between text-left font-normal bg-white">
-                <div className="flex items-center min-w-0 flex-1">
-                  <CalendarIcon className="mr-2 h-4 w-4 text-gray-500 flex-shrink-0" />
-                  <span className="text-gray-700 truncate">
-                    {dateFilter === 'all' && 'All time'}
-                    {dateFilter === 'today' && format(new Date(), "MMM. do yyyy")}
-                    {dateFilter === 'yesterday' && format(subDays(new Date(), 1), "MMM. do yyyy")}
-                    {dateFilter === 'week' && `${format(subDays(new Date(), 7), "MMM. do yyyy")} → ${format(new Date(), "MMM. do yyyy")}`}
-                    {dateFilter === 'month' && `${format(subMonths(new Date(), 1), "MMM. do yyyy")} → ${format(new Date(), "MMM. do yyyy")}`}
-                    {dateFilter === 'quarter' && `${format(subMonths(new Date(), 3), "MMM. do yyyy")} → ${format(new Date(), "MMM. do yyyy")}`}
-                    {dateFilter === 'custom' && customDateRange?.from && (
-                      customDateRange?.to ? (
-                        `${format(customDateRange.from, "MMM. do yyyy")} → ${format(customDateRange.to, "MMM. do yyyy")}`
-                      ) : (
-                        format(customDateRange.from, "MMM. do yyyy")
-                      )
-                    )}
-                  </span>
+          
+          {/* Desktop/Tablet: Use Popover */}
+          <div className="hidden sm:block">
+            <Popover open={isDatePickerOpen} onOpenChange={(open) => {
+              setIsDatePickerOpen(open)
+              if (open) {
+                setPendingDateFilter(dateFilter)
+                setPendingCustomDateRange(customDateRange)
+              }
+            }}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="w-full justify-between text-left font-normal bg-white">
+                  <div className="flex items-center min-w-0 flex-1">
+                    <CalendarIcon className="mr-2 h-4 w-4 text-gray-500 flex-shrink-0" />
+                    <span className="text-gray-700 truncate">
+                      {dateFilter === 'all' && 'All time'}
+                      {dateFilter === 'today' && format(new Date(), "MMM. do yyyy")}
+                      {dateFilter === 'yesterday' && format(subDays(new Date(), 1), "MMM. do yyyy")}
+                      {dateFilter === 'week' && `${format(subDays(new Date(), 7), "MMM. do yyyy")} → ${format(new Date(), "MMM. do yyyy")}`}
+                      {dateFilter === 'month' && `${format(subMonths(new Date(), 1), "MMM. do yyyy")} → ${format(new Date(), "MMM. do yyyy")}`}
+                      {dateFilter === 'quarter' && `${format(subMonths(new Date(), 3), "MMM. do yyyy")} → ${format(new Date(), "MMM. do yyyy")}`}
+                      {dateFilter === 'custom' && customDateRange?.from && (
+                        customDateRange?.to ? (
+                          `${format(customDateRange.from, "MMM. do yyyy")} → ${format(customDateRange.to, "MMM. do yyyy")}`
+                        ) : (
+                          format(customDateRange.from, "MMM. do yyyy")
+                        )
+                      )}
+                    </span>
+                  </div>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[var(--radix-popover-trigger-width)] min-w-full p-0 bg-white shadow-lg border" align="start" sideOffset={4}>
+                <div className="flex max-w-full" style={{ justifyContent: 'space-between' }}>
+                  {/* Suggestions */}
+                  <div className="w-60 bg-gray-50 p-4">
+                    <h3 className="text-sm font-medium text-gray-900 mb-3">Suggestions</h3>
+                    <div className="space-y-1">
+                      {pendingDateFilter === 'custom' && pendingCustomDateRange?.from && (
+                        <div className="w-full justify-between text-left px-3 py-2 bg-gray-200 rounded">
+                          <span className="text-black font-medium text-sm">Custom range</span>
+                          <span className="text-gray-500 text-xs block">
+                            {pendingCustomDateRange?.to ? (
+                              `${format(pendingCustomDateRange.from, "dd MMM")} - ${format(pendingCustomDateRange.to, "dd MMM yy")}`
+                            ) : (
+                              format(pendingCustomDateRange.from, "dd MMM yy")
+                            )}
+                          </span>
+                        </div>
+                      )}
+                      {/* Preset buttons */}
+                      {['today','yesterday','week','month','quarter'].map(preset => (
+                        <Button
+                          key={preset}
+                          variant="ghost"
+                          size="sm"
+                          className={`w-full justify-start text-left hover:bg-gray-100 px-3 py-2 h-auto text-sm ${pendingDateFilter === preset ? 'bg-gray-200' : ''}`}
+                          onClick={() => setDatePreset(preset)}
+                        >
+                          <span className={`${pendingDateFilter === preset ? 'text-black font-medium' : 'text-gray-700'}`}>{preset.charAt(0).toUpperCase()+preset.slice(1)}</span>
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                  {/* Calendar */}
+                  <div className="flex-1 min-w-0 p-4 overflow-hidden">
+                    <div className="w-full">
+                      <CalendarComponent
+                        mode="range"
+                        defaultMonth={pendingCustomDateRange?.from}
+                        selected={pendingCustomDateRange}
+                        onSelect={(range) => {
+                          setPendingCustomDateRange(range)
+                          if (range?.from || range?.to) {
+                            setPendingDateFilter('custom')
+                          }
+                        }}
+                        numberOfMonths={1}
+                        className="rounded-md border-0 w-full p-0 text-sm"
+                      />
+                    </div>
+                    {/* Buttons */}
+                    <div className="flex justify-between mt-4 gap-2">
+                      <Button variant="outline" size="sm" className="flex-1 text-sm" onClick={() => {
+                        setPendingDateFilter(dateFilter)
+                        setPendingCustomDateRange(customDateRange)
+                        setIsDatePickerOpen(false)
+                      }}>Cancel</Button>
+                      <Button size="sm" className="bg-black hover:bg-gray-800 text-white flex-1 text-sm" onClick={() => {
+                        setDateFilter(pendingDateFilter)
+                        setCustomDateRange(pendingCustomDateRange)
+                        setIsDatePickerOpen(false)
+                      }}>Apply</Button>
+                    </div>
+                  </div>
                 </div>
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-[var(--radix-popover-trigger-width)] min-w-full p-0 bg-white shadow-lg border" align="start" sideOffset={4}>
-              <div className="flex max-w-full" style={{ justifyContent: 'space-between' }}>
-                {/* Suggestions */}
-                <div className="w-40 sm:w-60 bg-gray-50 p-2 sm:p-4">
-                  <h3 className="text-xs sm:text-sm font-medium text-gray-900 mb-2 sm:mb-3">Suggestions</h3>
-                  <div className="space-y-1">
-                    {pendingDateFilter === 'custom' && pendingCustomDateRange?.from && (
-                      <div className="w-full justify-between text-left px-2 sm:px-3 py-1 sm:py-2 bg-gray-200 rounded">
-                        <span className="text-black font-medium text-xs sm:text-sm">Custom range</span>
-                        <span className="text-gray-500 text-xs block">
-                          {pendingCustomDateRange?.to ? (
-                            `${format(pendingCustomDateRange.from, "dd MMM")} - ${format(pendingCustomDateRange.to, "dd MMM yy")}`
-                          ) : (
-                            format(pendingCustomDateRange.from, "dd MMM yy")
-                          )}
-                        </span>
+              </PopoverContent>
+            </Popover>
+          </div>
+
+          {/* Mobile: Use fullscreen Dialog */}
+          <div className="block sm:hidden">
+            <Dialog open={isDateDialogOpen} onOpenChange={(open) => {
+              setIsDateDialogOpen(open)
+              if (open) {
+                setPendingDateFilter(dateFilter)
+                setPendingCustomDateRange(customDateRange)
+              }
+            }}>
+              <DialogTrigger asChild>
+                <Button 
+                  variant="outline" 
+                  className="w-full justify-between text-left font-normal bg-white"
+                  suppressHydrationWarning
+                >
+                  <div className="flex items-center min-w-0 flex-1">
+                    <CalendarIcon className="mr-2 h-4 w-4 text-gray-500 flex-shrink-0" />
+                    <span className="text-gray-700 truncate">
+                      {dateFilter === 'all' && 'All time'}
+                      {dateFilter === 'today' && format(new Date(), "MMM. do")}
+                      {dateFilter === 'yesterday' && format(subDays(new Date(), 1), "MMM. do")}
+                      {dateFilter === 'week' && `Last 7 days`}
+                      {dateFilter === 'month' && `Last 30 days`}
+                      {dateFilter === 'quarter' && `Last 90 days`}
+                      {dateFilter === 'custom' && customDateRange?.from && (
+                        customDateRange?.to ? (
+                          `${format(customDateRange.from, "MMM. do")} → ${format(customDateRange.to, "MMM. do")}`
+                        ) : (
+                          format(customDateRange.from, "MMM. do")
+                        )
+                      )}
+                    </span>
+                  </div>
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="p-0 gap-0 bg-white max-w-full w-full h-full m-0 rounded-none" suppressHydrationWarning>
+                <div className="flex flex-col h-full w-full">
+                  {/* Header */}
+                  <DialogHeader className="p-4 border-b bg-gray-50">
+                    <DialogTitle className="text-lg font-semibold text-center">Select Date Range</DialogTitle>
+                    <DialogDescription className="text-sm text-gray-600 text-center">
+                      Choose a date range to filter your sales data
+                    </DialogDescription>
+                  </DialogHeader>
+
+                  {/* Content */}
+                  <div className="flex-1 overflow-y-auto">
+                    {/* Suggestions Section - Top */}
+                    <div className="p-4 bg-gray-50 border-b">
+                      <h3 className="text-sm font-medium text-gray-900 mb-3">Quick Selection</h3>
+                      <div className="space-y-2">
+                        {pendingDateFilter === 'custom' && pendingCustomDateRange?.from && (
+                          <div className="px-3 py-2 bg-gray-200 rounded text-center mb-3">
+                            <span className="text-black font-medium text-sm">Custom range</span>
+                            <span className="text-gray-500 text-xs block">
+                              {pendingCustomDateRange?.to ? (
+                                `${format(pendingCustomDateRange.from, "dd MMM")} - ${format(pendingCustomDateRange.to, "dd MMM yy")}`
+                              ) : (
+                                format(pendingCustomDateRange.from, "dd MMM yy")
+                              )}
+                            </span>
+                          </div>
+                        )}
+                        <div className="flex flex-wrap gap-2">
+                          {['today','yesterday','week','month','quarter'].map(preset => (
+                            <Button
+                              key={preset}
+                              variant="ghost"
+                              size="sm"
+                              className={`justify-center text-center hover:bg-gray-100 px-4 py-2 h-auto text-sm rounded-full ${pendingDateFilter === preset ? 'bg-gray-200' : ''}`}
+                              onClick={() => setDatePreset(preset)}
+                            >
+                              <span className={`${pendingDateFilter === preset ? 'text-black font-medium' : 'text-gray-700'}`}>
+                                {preset.charAt(0).toUpperCase()+preset.slice(1)}
+                              </span>
+                            </Button>
+                          ))}
+                        </div>
                       </div>
-                    )}
-                    {/* Preset buttons */}
-                    {['today','yesterday','week','month','quarter'].map(preset => (
-                      <Button
-                        key={preset}
-                        variant="ghost"
-                        size="sm"
-                        className={`w-full justify-start text-left hover:bg-gray-100 px-2 sm:px-3 py-1 sm:py-2 h-auto text-xs sm:text-sm ${pendingDateFilter === preset ? 'bg-gray-200' : ''}`}
-                        onClick={() => setDatePreset(preset)}
+                    </div>
+
+                    {/* Calendar Section - Middle */}
+                    <div className="p-4 flex-1 flex justify-center items-start">
+                      <div className="w-full">
+                        <CalendarComponent
+                          mode="range"
+                          defaultMonth={pendingCustomDateRange?.from}
+                          selected={pendingCustomDateRange}
+                          onSelect={(range) => {
+                            setPendingCustomDateRange(range)
+                            if (range?.from || range?.to) {
+                              setPendingDateFilter('custom')
+                            }
+                          }}
+                          numberOfMonths={1}
+                          className="rounded-md border-0 w-full p-0"
+                          classNames={{
+                            months: "flex flex-col space-y-4 w-full",
+                            month: "space-y-4 w-full",
+                            caption: "flex justify-center pt-1 relative items-center w-full",
+                            caption_label: "text-lg font-medium",
+                            nav: "space-x-1 flex items-center",
+                            nav_button: "h-8 w-8 bg-transparent p-0 hover:bg-gray-100 rounded cursor-pointer flex items-center justify-center",
+                            nav_button_previous: "absolute left-1",
+                            nav_button_next: "absolute right-1",
+                            table: "w-full border-collapse space-y-1",
+                            head_row: "flex w-full",
+                            head_cell: "text-gray-500 rounded-md font-normal text-base flex-1 text-center py-2",
+                            row: "flex w-full mt-2",
+                            cell: "text-center text-base p-0 relative flex-1",
+                            day: "h-12 w-full p-0 font-normal hover:bg-gray-100 rounded mx-auto cursor-pointer flex items-center justify-center text-base",
+                            day_selected: "bg-gray-900 text-white hover:bg-gray-800 hover:text-white",
+                            day_today: "bg-gray-200 text-gray-900",
+                            day_outside: "text-gray-400",
+                            day_disabled: "text-gray-300",
+                            day_range_middle: "bg-gray-100 text-gray-900 hover:bg-gray-200",
+                            day_hidden: "invisible",
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Footer with Cancel/Apply buttons - Bottom */}
+                  <div className="p-4 border-t bg-white">
+                    <div className="flex gap-3">
+                      <Button 
+                        variant="outline" 
+                        className="flex-1" 
+                        onClick={() => {
+                          setPendingDateFilter(dateFilter)
+                          setPendingCustomDateRange(customDateRange)
+                          setIsDateDialogOpen(false)
+                        }}
                       >
-                        <span className={`${pendingDateFilter === preset ? 'text-black font-medium' : 'text-gray-700'}`}>{preset.charAt(0).toUpperCase()+preset.slice(1)}</span>
+                        Cancel
                       </Button>
-                    ))}
+                      <Button 
+                        className="bg-black hover:bg-gray-800 text-white flex-1" 
+                        onClick={() => {
+                          setDateFilter(pendingDateFilter)
+                          setCustomDateRange(pendingCustomDateRange)
+                          setIsDateDialogOpen(false)
+                        }}
+                      >
+                        Apply
+                      </Button>
+                    </div>
                   </div>
                 </div>
-                {/* Calendar */}
-                <div className="flex-1 min-w-0 p-2 sm:p-4 overflow-hidden">
-                  <div className="w-full" style={{ width: '100%' }}>
-                    <CalendarComponent
-                      mode="range"
-                      defaultMonth={pendingCustomDateRange?.from}
-                      selected={pendingCustomDateRange}
-                      onSelect={(range) => {
-                        setPendingCustomDateRange(range)
-                        if (range?.from || range?.to) {
-                          setPendingDateFilter('custom')
-                        }
-                      }}
-                      numberOfMonths={1}
-                      className="rounded-md border-0 w-full p-0 text-xs sm:text-sm"
-                      style={{ width: '100%' }}
-                    />
-                  </div>
-                  {/* Buttons */}
-                  <div className="flex justify-between mt-2 sm:mt-4 gap-1 sm:gap-2">
-                    <Button variant="outline" size="sm" className="flex-1 text-xs sm:text-sm" onClick={() => {
-                      setPendingDateFilter(dateFilter)
-                      setPendingCustomDateRange(customDateRange)
-                      setIsDatePickerOpen(false)
-                    }}>Cancel</Button>
-                    <Button size="sm" className="bg-black hover:bg-gray-800 text-white flex-1 text-xs sm:text-sm" onClick={() => {
-                      setDateFilter(pendingDateFilter)
-                      setCustomDateRange(pendingCustomDateRange)
-                      setIsDatePickerOpen(false)
-                    }}>Apply</Button>
-                  </div>
-                </div>
-              </div>
-            </PopoverContent>
-          </Popover>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
 
         {/* Status Filter and Rows per page - side by side on small screens */}
