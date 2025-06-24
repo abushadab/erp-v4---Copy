@@ -57,6 +57,9 @@ import {
   type PackagingVariation
 } from '@/lib/types'
 
+// Import cart management hook
+import { useCartManagement, type DiscountType, type SaleItem, type CartItem } from '@/hooks/sales/useCartManagement'
+
 // Import real Supabase functions
 import { getPackagingByWarehouse, createSale } from '@/lib/supabase/sales-client'
 import { invalidateSalesCache } from '@/lib/hooks/useSalesData'
@@ -64,8 +67,7 @@ import { useCurrentUser } from '@/hooks/useCurrentUser'
 
 // Payment methods - now loaded from accounts marked as payment methods
 
-// Discount type enum
-type DiscountType = 'percentage' | 'fixed'
+// Discount type is now imported from the hook
 
 // Form schema
 const saleSchema = z.object({
@@ -87,26 +89,7 @@ const saleSchema = z.object({
 
 type SaleFormData = z.infer<typeof saleSchema>
 
-interface SaleItem {
-  productId: string
-  variationId?: string
-  quantity: number
-  discount: number
-  discountType: DiscountType
-  packagingId: string
-  packagingVariationId?: string
-  isFreeGift: boolean
-}
-
-interface CartItem extends SaleItem {
-  product: Product
-  variation?: ProductVariation
-  packaging: Packaging
-  packagingVariation?: PackagingVariation
-  originalTotal: number
-  discountAmount: number
-  total: number
-}
+// SaleItem and CartItem interfaces are now imported from the hook
 
 interface SaleResult {
   success: boolean
@@ -291,9 +274,15 @@ export default function AddSale({ editMode, existingSale, saleId }: AddSaleProps
 
 
 
-  const [cart, setCart] = useState<SaleItem[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedWarehouse, setSelectedWarehouse] = useState('')
+  
+  // Packaging data state
+  const [packaging, setPackaging] = useState<Packaging[]>([])
+  const [loadingPackaging, setLoadingPackaging] = useState(true)
+  
+  // Cart management using custom hook
+  const cartManagement = useCartManagement({ products, packaging })
 
   // Handle warehouse selection and load warehouse-specific products
   useEffect(() => {
@@ -333,9 +322,7 @@ export default function AddSale({ editMode, existingSale, saleId }: AddSaleProps
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [saleResult, setSaleResult] = useState<SaleResult>({ success: false, message: '' })
   const [showAddCustomerModal, setShowAddCustomerModal] = useState(false)
-  const [totalDiscount, setTotalDiscount] = useState(0)
-  const [totalDiscountType, setTotalDiscountType] = useState<DiscountType>('percentage')
-  const [taxRate, setTaxRate] = useState(0)
+  // Discount and tax state now managed by the cart hook
   const [gridColumns, setGridColumns] = useState(3)
   
   // Variation selection modal state
@@ -346,10 +333,6 @@ export default function AddSale({ editMode, existingSale, saleId }: AddSaleProps
   const [showPackagingModal, setShowPackagingModal] = useState(false)
   const [selectedProductForPackaging, setSelectedProductForPackaging] = useState<Product | null>(null)
   const [selectedVariationForPackaging, setSelectedVariationForPackaging] = useState<ProductVariation | null>(null)
-  
-  // Packaging data state
-  const [packaging, setPackaging] = useState<Packaging[]>([])
-  const [loadingPackaging, setLoadingPackaging] = useState(true)
   
   // Discount modal state
   const [showDiscountModal, setShowDiscountModal] = useState(false)
@@ -453,72 +436,30 @@ export default function AddSale({ editMode, existingSale, saleId }: AddSaleProps
     return filteredList
   }, [searchTerm, products])
 
-  // Calculate cart items with product details
-  const cartItems = useMemo(() => {
-    const items: CartItem[] = []
-    
-    cart.forEach(item => {
-      const product = products.find(p => p.id === item.productId)
-      if (!product) return
-      
-      const variation = item.variationId ? product.variations?.find((v: any) => v.id === item.variationId) : undefined
-      const foundPackaging = packaging.find((p: Packaging) => p.id === item.packagingId)
-      if (!foundPackaging) return // Skip if packaging not found
-      const packagingVariation = item.packagingVariationId ? foundPackaging.variations?.find((v: any) => v.id === item.packagingVariationId) : undefined
-      
-      // Debug: Log price calculation details
-      console.log('🔍 Cart price calculation:', {
-        productId: item.productId,
-        variationId: item.variationId,
-        hasVariation: !!variation,
-        variationPrice: variation?.price,
-        productPrice: product.price,
-        productType: product.type,
-        isFreeGift: item.isFreeGift,
-        productVariations: product.variations?.map((v: ProductVariation) => ({ id: v.id, price: v.price }))
-      })
-      
-      // If marked as free gift, set price to 0
-      const price = item.isFreeGift ? 0 : (variation ? Number(variation.price) : Number(product.price || 0))
-      const originalTotal = price * item.quantity
-      
-      let discountAmount = 0
-      if (item.discountType === 'percentage') {
-        discountAmount = (originalTotal * item.discount) / 100
-      } else {
-        discountAmount = item.discount
-      }
-      
-      const total = originalTotal - discountAmount
-      
-      items.push({
-        ...item,
-        product,
-        variation,
-        packaging: foundPackaging,
-        packagingVariation,
-        originalTotal,
-        discountAmount,
-        total
-      })
-    })
-    
-    return items
-  }, [cart, products, packaging])
+  // Cart items are now calculated by the hook
 
-  // Calculate totals
-  const subtotal = cartItems.reduce((sum, item) => sum + item.total, 0)
-  
-  let totalDiscountAmount = 0
-  if (totalDiscountType === 'percentage') {
-    totalDiscountAmount = (subtotal * totalDiscount) / 100
-  } else {
-    totalDiscountAmount = totalDiscount
-  }
-  
-  const afterDiscount = subtotal - totalDiscountAmount
-  const taxAmount = (afterDiscount * taxRate) / 100
-  const cartTotal = afterDiscount + taxAmount
+  // Extract values from cart management hook
+  const {
+    cart,
+    cartItems,
+    calculations: { subtotal, totalDiscountAmount, afterDiscount, taxAmount, grandTotal: cartTotal },
+    totalDiscount,
+    totalDiscountType,
+    taxRate,
+    setTotalDiscount,
+    setTotalDiscountType,
+    setTaxRate,
+    addToCart,
+    updateCartItemQuantity,
+    removeFromCart,
+    updateItemDiscount,
+    updateItemDiscountType,
+    toggleFreeGift,
+    clearCart,
+    getAvailableStock,
+    isCartEmpty,
+    totalItemsInCart
+  } = cartManagement
 
   // Show alert with auto-hide
   const showAlert = (type: 'success' | 'error', message: string) => {
@@ -548,7 +489,7 @@ export default function AddSale({ editMode, existingSale, saleId }: AddSaleProps
       return false
     }
     
-    if (cart.length === 0) {
+    if (isCartEmpty) {
       showAlert('error', 'Please add at least one item to the cart')
       return false
     }
@@ -585,92 +526,17 @@ export default function AddSale({ editMode, existingSale, saleId }: AddSaleProps
     showAlert('success', `Customer ${newCustomer.name} added successfully!`)
   }
 
-  const addToCart = (productId: string, packagingId: string, variationId?: string, packagingVariationId?: string) => {
-    const existingItemIndex = cart.findIndex(item => 
-      item.productId === productId && 
-      item.variationId === variationId &&
-      item.packagingId === packagingId &&
-      item.packagingVariationId === packagingVariationId
-    )
-    
-    if (existingItemIndex >= 0) {
-      updateQuantity(productId, cart[existingItemIndex].quantity + 1, variationId, packagingId, packagingVariationId)
-    } else {
-      setCart(prev => [...prev, {
-        productId,
-        variationId,
-        quantity: 1,
-        discount: 0,
-        discountType: 'percentage',
-        packagingId,
-        packagingVariationId,
-        isFreeGift: false
-      }])
-    }
-  }
+  // addToCart function is now provided by the hook
 
-  const updateQuantity = (productId: string, quantity: number, variationId?: string, packagingId?: string, packagingVariationId?: string) => {
-    if (quantity <= 0) {
-      setCart(prev => prev.filter(item => 
-        !(item.productId === productId && 
-          item.variationId === variationId &&
-          item.packagingId === packagingId &&
-          item.packagingVariationId === packagingVariationId)
-      ))
-    } else {
-      setCart(prev => prev.map(item => 
-        item.productId === productId && 
-        item.variationId === variationId &&
-        item.packagingId === packagingId &&
-        item.packagingVariationId === packagingVariationId
-          ? { ...item, quantity }
-          : item
-      ))
-    }
-  }
+  // updateQuantity function is now updateCartItemQuantity from the hook
 
-  const updateItemDiscount = (productId: string, discount: number, variationId?: string) => {
-    setCart(prev => prev.map(item => 
-      item.productId === productId && item.variationId === variationId
-        ? { ...item, discount }
-        : item
-    ))
-  }
+  // updateItemDiscount function is now provided by the hook
 
-  const updateItemDiscountType = (productId: string, discountType: DiscountType, variationId?: string) => {
-    setCart(prev => prev.map(item => 
-      item.productId === productId && item.variationId === variationId
-        ? { ...item, discountType }
-        : item
-    ))
-  }
+  // updateItemDiscountType function is now provided by the hook
 
-  const toggleFreeGift = (productId: string, variationId?: string, packagingId?: string, packagingVariationId?: string) => {
-    setCart(prev => prev.map(item => 
-      item.productId === productId && 
-      item.variationId === variationId &&
-      item.packagingId === packagingId &&
-      item.packagingVariationId === packagingVariationId
-        ? { ...item, isFreeGift: !item.isFreeGift, discount: 0 } // Reset discount when toggling free gift
-        : item
-    ))
-  }
+  // toggleFreeGift function is now provided by the hook
 
-  const getAvailableStock = (product: Product, variationId?: string): number => {
-    // If warehouse stock is available (from product_warehouse_stock), use that
-    if ((product as any).warehouse_stock !== undefined) {
-      return (product as any).warehouse_stock || 0
-    }
-    
-    // Otherwise, use the regular stock calculation
-    if (product.type === 'variation' && variationId) {
-      const variation = product.variations?.find(v => v.id === variationId)
-      return variation ? variation.stock : 0
-    } else if (product.type === 'simple') {
-      return product.stock || 0
-    }
-    return 0
-  }
+  // getAvailableStock function is now provided by the hook
 
   const handleProductClick = (product: Product) => {
     if (product.type === 'variation' && product.variations && product.variations.length > 0) {
@@ -740,7 +606,7 @@ export default function AddSale({ editMode, existingSale, saleId }: AddSaleProps
         return
       }
       
-      if (cart.length === 0) {
+      if (isCartEmpty) {
         showAlert('error', 'Please add at least one item to the cart')
         setIsSubmitting(false)
         return
@@ -801,10 +667,8 @@ export default function AddSale({ editMode, existingSale, saleId }: AddSaleProps
   const startNewSale = () => {
     setShowSuccess(false)
     setSaleResult({ success: false, message: '' })
-    setCart([])
+    clearCart()
     setSearchTerm('')
-    setTotalDiscount(0)
-    setTaxRate(0)
     reset()
     setSelectedWarehouse('')
     setSelectedCustomer('')
@@ -1358,7 +1222,7 @@ export default function AddSale({ editMode, existingSale, saleId }: AddSaleProps
                                 type="button"
                                 variant="outline"
                                 size="sm"
-                                onClick={() => updateQuantity(item.productId, item.quantity - 1, item.variationId, item.packagingId, item.packagingVariationId)}
+                                onClick={() => updateCartItemQuantity(item.productId, item.quantity - 1, item.variationId, item.packagingId, item.packagingVariationId)}
                                 disabled={isSubmitting}
                                 className="h-8 w-8 p-0"
                               >
@@ -1371,7 +1235,7 @@ export default function AddSale({ editMode, existingSale, saleId }: AddSaleProps
                                 type="button"
                                 variant="outline"
                                 size="sm"
-                                onClick={() => updateQuantity(item.productId, item.quantity + 1, item.variationId, item.packagingId, item.packagingVariationId)}
+                                onClick={() => updateCartItemQuantity(item.productId, item.quantity + 1, item.variationId, item.packagingId, item.packagingVariationId)}
                                 disabled={item.quantity >= getAvailableStock(item.product, item.variationId) || isSubmitting}
                                 className="h-8 w-8 p-0"
                               >
@@ -1448,7 +1312,7 @@ export default function AddSale({ editMode, existingSale, saleId }: AddSaleProps
                         type="button"
                         size="lg"
                         className="w-full"
-                        disabled={cartItems.length === 0 || isSubmitting}
+                        disabled={isCartEmpty || isSubmitting}
                         onClick={handleCompleteSale}
                       >
                         {isSubmitting ? 'Processing...' : 'Complete Sale'}
