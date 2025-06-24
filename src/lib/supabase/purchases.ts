@@ -3,86 +3,54 @@ import { updateWarehouseStock as updateWarehouseStockFunction } from '../utils/m
 import { updatePackagingWarehouseStock as updatePackagingWarehouseStockFunction } from '../utils/multi-warehouse-packaging-stock'
 import { createPurchaseJournalEntry, createPurchaseReturnJournalEntry, createPurchaseReceiptJournalEntry, createPaymentJournalEntry, createPaymentReversalJournalEntry } from './accounts-client'
 import { apiCache } from './cache'
+import { createPurchaseEvent, getPurchaseById } from './purchases-core'
+import { 
+  withPurchaseDeduplication,
+  convertLegacyReturns,
+  getPurchaseReturnsLegacy,
+  getPurchaseStats,
+  generateInitialTimelineEvents,
+  backfillAllTimelineEvents,
+  fixAllPurchaseStatuses,
+  backfillPaymentTimelineEvents,
+  createReceiptTimelineEvent
+} from './purchases-utils'
+import { 
+  calculatePurchaseReturnStatus,
+  calculateNetPaymentAmount, 
+  calculatePaymentStatus,
+  calculateOriginalPaymentStatus,
+  calculateRefundDue,
+  calculateNetPaymentStatus,
+  calculateCompletePaymentStatus,
+  calculateRefundBreakdown,
+  checkRefundEligibility
+} from './purchases-calculations'
+import {
+  DatabasePurchase,
+  DatabasePurchaseItem,
+  DatabaseSupplier,
+  DatabaseWarehouse,
+  PurchaseWithItems,
+  PurchaseReturn,
+  PurchaseReturnItem,
+  RefundTransaction,
+  PurchaseEvent,
+  PurchasePayment,
+  CreatePurchaseData,
+  CreatePurchaseItemData,
+  UpdatePurchaseData,
+  ProcessPurchaseReturnData,
+  CreatePurchasePaymentData,
+  AutomaticRefundResponse,
+  PurchaseStatsResponse,
+  PurchaseWithPayments,
+  PAYMENT_METHODS
+} from './purchases-types'
 
-// 🔄 REQUEST DEDUPLICATION SYSTEM (prevents duplicate API calls in React 18 Strict Mode)
-// This system is deprecated in favor of the global apiCache system
-// Keeping for backward compatibility but new functions should use apiCache
+// Request deduplication system moved to purchases-utils.ts
 
-const purchaseDataCache = new Map<string, {
-  currentRequest?: Promise<any>
-  lastFetch?: number
-  data?: any
-}>()
-
-function withPurchaseDeduplication<T>(key: string, fn: () => Promise<T>): Promise<T> {
-  // Use global apiCache instead of local cache for better consistency
-  return apiCache.get(key, fn)
-}
-
-// Database types for purchases
-export interface DatabasePurchase {
-  id: string
-  supplier_id: string
-  supplier_name: string
-  warehouse_id: string
-  warehouse_name: string
-  total_amount: number
-  purchase_date: string
-  status: 'pending' | 'partially_received' | 'received' | 'partially_returned' | 'returned' | 'cancelled'
-  created_by: string
-  last_updated: string
-  notes?: string
-  created_at: string
-  updated_at: string
-  amount_paid?: number
-  payment_status?: string
-}
-
-export interface DatabasePurchaseItem {
-  id: string
-  purchase_id: string
-  item_id: string
-  item_type: 'product' | 'package'
-  item_name: string
-  variation_id?: string
-  quantity: number
-  received_quantity: number
-  returned_quantity: number
-  purchase_price: number
-  total: number
-  created_at: string
-  updated_at: string
-}
-
-export interface DatabaseSupplier {
-  id: string
-  name: string
-  email?: string
-  phone?: string
-  address?: string
-  status: 'active' | 'inactive'
-  total_purchases: number
-  total_spent: number
-  join_date: string
-  created_at: string
-  updated_at: string
-}
-
-export interface DatabaseWarehouse {
-  id: string
-  name: string
-  location?: string
-  status: 'active' | 'inactive'
-  created_at: string
-  updated_at: string
-}
-
-
-
-// Combined type for purchase with items
-export interface PurchaseWithItems extends DatabasePurchase {
-  items: DatabasePurchaseItem[]
-}
+// All types are now imported from purchases-types.ts
 
 // Query functions
 export async function getPurchases(filters?: {
@@ -137,30 +105,8 @@ export async function getPurchases(filters?: {
   return purchases
 }
 
-export async function getPurchaseById(id: string): Promise<PurchaseWithItems | null> {
-  return withPurchaseDeduplication(`purchase-${id}`, async () => {
-    const supabase = createClient()
-    
-    const { data, error } = await supabase
-      .from('purchases')
-      .select(`
-        *,
-        items:purchase_items(*)
-      `)
-      .eq('id', id)
-      .single()
-
-    if (error) {
-      if (error.code === 'PGRST116') {
-        return null // Purchase not found
-      }
-      console.error('Error fetching purchase:', error)
-      throw new Error('Failed to fetch purchase')
-    }
-
-    return data
-  })
-}
+// getPurchaseById moved to purchases-core.ts and imported above
+export { getPurchaseById } from './purchases-core'
 
 export async function getSuppliers(): Promise<DatabaseSupplier[]> {
   return apiCache.get('suppliers-active', async () => {
@@ -188,65 +134,7 @@ export async function getWarehouses(): Promise<DatabaseWarehouse[]> {
   return await getActiveWarehouses()
 }
 
-// New interface for purchase returns with refund data
-export interface PurchaseReturn {
-  id: string
-  purchase_id: string
-  return_number: string
-  supplier_id: string
-  supplier_name: string
-  warehouse_id: string
-  warehouse_name: string
-  total_amount: number
-  return_date: string
-  reason: string
-  status: 'pending' | 'completed' | 'cancelled'
-  processed_by?: string
-  notes?: string
-  refund_status: 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled'
-  refund_amount: number
-  refund_processed_at?: string
-  refund_processed_by?: string
-  refund_failure_reason?: string
-  auto_refund_eligible: boolean
-  created_at: string
-  updated_at: string
-  // Related data
-  purchase?: DatabasePurchase
-  items?: PurchaseReturnItem[]
-  refund_transactions?: RefundTransaction[]
-}
-
-export interface PurchaseReturnItem {
-  id: string
-  return_id: string
-  item_id: string
-  item_type: 'product' | 'package'
-  item_name: string
-  variation_id?: string
-  quantity_returned: number
-  unit_price: number
-  total_amount: number
-  created_at: string
-  updated_at: string
-}
-
-export interface RefundTransaction {
-  id: string
-  return_id: string
-  payment_id: string
-  refund_amount: number
-  refund_method: 'cash' | 'bank_transfer' | 'check' | 'credit_card' | 'other'
-  status: 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled'
-  payment_date?: string
-  bank_reference?: string
-  check_number?: string
-  failure_reason?: string
-  processed_at?: string
-  journal_entry_id?: string
-  created_at: string
-  updated_at: string
-}
+// Purchase return types are now imported from purchases-types.ts
 
 export async function getPurchaseReturns(): Promise<PurchaseReturn[]> {
   const supabase = createClient()
@@ -296,136 +184,11 @@ export async function getPurchaseReturns(): Promise<PurchaseReturn[]> {
   }
         }
         
-// Legacy method for backward compatibility
-async function getPurchaseReturnsLegacy(): Promise<PurchaseWithItems[]> {
-  const supabase = createClient()
-
-  const { data: purchases, error } = await supabase
-    .from('purchases')
-    .select(`
-      *,
-      purchase_items (*)
-    `)
-    .in('status', ['returned', 'partially_returned'])
-    .order('updated_at', { ascending: false })
-
-  if (error) {
-    throw new Error(`Failed to fetch purchase returns: ${error.message}`)
-  }
-
-  return purchases?.map(purchase => ({
-    ...purchase,
-    items: purchase.purchase_items || []
-  })) || []
-}
-
-// Convert legacy purchase returns to new format
-function convertLegacyReturns(legacyReturns: PurchaseWithItems[]): PurchaseReturn[] {
-  return legacyReturns.map(purchase => ({
-    id: `legacy-${purchase.id}`,
-    purchase_id: purchase.id,
-    return_number: `RET-${purchase.id}`,
-    supplier_id: purchase.supplier_id,
-    supplier_name: purchase.supplier_name,
-    warehouse_id: purchase.warehouse_id,
-    warehouse_name: purchase.warehouse_name,
-    total_amount: purchase.total_amount,
-    return_date: purchase.updated_at.split('T')[0], // Use updated_at as return date
-    reason: 'Legacy return (migrated from old system)',
-    status: 'completed' as const,
-    processed_by: purchase.created_by,
-    notes: purchase.notes,
-    refund_status: 'pending' as const,
-    refund_amount: 0,
-    auto_refund_eligible: false, // Legacy returns are not auto-eligible
-    created_at: purchase.created_at,
-    updated_at: purchase.updated_at,
-    purchase: purchase,
-    items: [], // Legacy items structure is different
-    refund_transactions: []
-  }))
-}
+// Legacy conversion functions moved to purchases-utils.ts and imported above
 
 // New refund-related functions
-export async function calculateRefundBreakdown(returnId: string): Promise<{
-  success: boolean
-  refunds: RefundTransaction[]
-  total_amount: number
-  errors: string[]
-}> {
-  const supabase = createClient()
 
-  try {
-    // First, get the return data to extract purchase_id and total_amount
-    const { data: returnData, error: returnError } = await supabase
-      .from('purchase_returns')
-      .select('purchase_id, total_amount')
-      .eq('id', returnId)
-      .single()
-
-    if (returnError || !returnData) {
-      console.error('Error fetching return data:', returnError)
-      return {
-        success: false,
-        refunds: [],
-        total_amount: 0,
-        errors: [returnError?.message || 'Return not found']
-      }
-    }
-
-    // Now call the database function with correct parameters
-    const { data, error } = await supabase.rpc('calculate_refund_breakdown', {
-      p_purchase_id: returnData.purchase_id,
-      p_refund_amount: returnData.total_amount
-    })
-
-    if (error) {
-      console.error('Error calculating refund breakdown:', error)
-      return {
-        success: false,
-        refunds: [],
-        total_amount: 0,
-        errors: [error.message]
-      }
-    }
-
-    // Transform the database result to match our interface
-    const refunds: RefundTransaction[] = data?.map((item: any) => ({
-      id: `temp-${item.payment_id}`,
-      return_id: returnId,
-      payment_id: item.payment_id,
-      refund_amount: Number(item.refund_amount),
-      refund_method: item.payment_method,
-      status: 'pending' as const,
-      payment_date: item.payment_date,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    })) || []
-
-    const totalAmount = refunds.reduce((sum, refund) => sum + refund.refund_amount, 0)
-
-    return {
-      success: true,
-      refunds,
-      total_amount: totalAmount,
-      errors: []
-    }
-  } catch (error) {
-    console.error('Refund calculation failed:', error)
-    return {
-      success: false,
-      refunds: [],
-      total_amount: 0,
-      errors: [error instanceof Error ? error.message : 'Unknown error']
-    }
-  }
-}
-
-export async function processAutomaticRefund(returnId: string, processedBy: string): Promise<{
-  success: boolean
-  refund_transactions: RefundTransaction[]
-  errors: string[]
-}> {
+export async function processAutomaticRefund(returnId: string, processedBy: string): Promise<AutomaticRefundResponse> {
   const supabase = createClient()
 
   try {
@@ -458,38 +221,6 @@ export async function processAutomaticRefund(returnId: string, processedBy: stri
   }
 }
 
-export async function checkRefundEligibility(purchaseId: string): Promise<{
-  eligible: boolean
-  reason?: string
-  days_since_purchase?: number
-}> {
-  const supabase = createClient()
-
-  try {
-    const { data, error } = await supabase.rpc('is_return_refund_eligible', {
-      p_purchase_id: purchaseId
-    })
-
-    if (error) {
-      console.error('Error checking refund eligibility:', error)
-      return {
-        eligible: false,
-        reason: error.message
-      }
-    }
-
-    return data || {
-      eligible: false,
-      reason: 'No data returned'
-    }
-  } catch (error) {
-    console.error('Refund eligibility check failed:', error)
-    return {
-      eligible: false,
-      reason: error instanceof Error ? error.message : 'Unknown error'
-    }
-  }
-}
 
 export async function updateRefundStatus(
   refundTransactionId: string, 
@@ -524,26 +255,7 @@ export async function updateRefundStatus(
   return data
 }
 
-// Mutation functions
-export interface CreatePurchaseData {
-  supplier_id: string
-  supplier_name: string
-  warehouse_id: string
-  warehouse_name: string
-  purchase_date: string
-  created_by: string
-  notes?: string
-}
-
-export interface CreatePurchaseItemData {
-  item_id: string
-  item_type: 'product' | 'package'
-  item_name: string
-  variation_id?: string
-  quantity: number
-  purchase_price: number
-  total: number
-}
+// Mutation functions - types are now imported from purchases-types.ts
 
 export async function createPurchase(
   purchaseData: CreatePurchaseData,
@@ -651,16 +363,7 @@ export async function createPurchase(
   }
 }
 
-export interface UpdatePurchaseData {
-  id: string
-  supplier_id?: string
-  supplier_name?: string
-  warehouse_id?: string
-  warehouse_name?: string
-  purchase_date?: string
-  status?: 'pending' | 'partially_received' | 'received' | 'returned' | 'cancelled'
-  notes?: string
-}
+// UpdatePurchaseData type is now imported from purchases-types.ts
 
 export async function updatePurchase(data: UpdatePurchaseData): Promise<DatabasePurchase> {
   const supabase = createClient()
@@ -769,99 +472,8 @@ export async function updatePurchaseStatus(purchaseId: string, createTimelineEve
   return purchase
 }
 
-// New function specifically for tracking receipt updates
-export async function createReceiptTimelineEvent(purchaseId: string, actualQuantityChange?: number): Promise<void> {
-  try {
-    const supabase = await createClient()
-
-    // Get current purchase and items data
-    const [purchaseResult, itemsResult, previousEventsResult] = await Promise.all([
-      supabase.from('purchases').select('status').eq('id', purchaseId).single(),
-      supabase.from('purchase_items').select('quantity, received_quantity').eq('purchase_id', purchaseId),
-      supabase.from('purchase_events')
-        .select('event_description')
-        .eq('purchase_id', purchaseId)
-        .in('event_type', ['partial_receipt', 'full_receipt'])
-        .order('created_at', { ascending: false })
-        .limit(1)
-    ])
-
-    if (purchaseResult.error || itemsResult.error) {
-      console.error('Error fetching data for receipt timeline:', purchaseResult.error || itemsResult.error)
-      return
-    }
-
-    const purchase = purchaseResult.data
-    const items = itemsResult.data
-    const previousEvents = previousEventsResult.data || []
-
-    // Calculate current totals
-    const totalOrdered = items.reduce((sum, item) => sum + item.quantity, 0)
-    const totalReceived = items.reduce((sum, item) => sum + item.received_quantity, 0)
-    const affectedItems = items.filter(item => item.received_quantity > 0).length
-
-    // Use actualQuantityChange if provided, otherwise calculate increment from previous receipt event
-    let newItemsReceived = actualQuantityChange || 0
-    if (!actualQuantityChange) {
-      let previousReceived = 0
-      if (previousEvents.length > 0) {
-        const previousDescription = previousEvents[0].event_description
-        // Extract previous received count from description like "16 out of 50 items received"
-        const match = previousDescription?.match(/(\d+) out of \d+ items received/)
-        if (match) {
-          previousReceived = parseInt(match[1])
-        }
-      }
-      newItemsReceived = totalReceived - previousReceived
-    }
-
-    let eventType: PurchaseEvent['event_type']
-    let eventTitle: string
-    let eventDescription: string
-
-    if (purchase.status === 'received') {
-      eventType = 'full_receipt'
-      eventTitle = 'All Items Received'
-      if (newItemsReceived > 0 && (previousEvents.length > 0 || actualQuantityChange)) {
-        eventDescription = `All ordered items have been received and verified (+${newItemsReceived} new items)`
-      } else {
-        eventDescription = 'All ordered items have been received and verified'
-      }
-    } else if (purchase.status === 'partially_received') {
-      eventType = 'partial_receipt'
-      eventTitle = 'Items Partially Received'
-      if (newItemsReceived > 0 && (previousEvents.length > 0 || actualQuantityChange)) {
-        eventDescription = `${totalReceived} out of ${totalOrdered} items received (+${newItemsReceived} new items)`
-      } else {
-        eventDescription = `${totalReceived} out of ${totalOrdered} items received`
-      }
-    } else {
-      // For other cases, create a general receipt event
-      eventType = 'status_change'
-      eventTitle = 'Receipt Updated'
-      if (newItemsReceived > 0 && (previousEvents.length > 0 || actualQuantityChange)) {
-        eventDescription = `Purchase receipt updated - ${totalReceived} out of ${totalOrdered} items received (+${newItemsReceived} new items)`
-      } else {
-        eventDescription = `Purchase receipt updated - ${totalReceived} out of ${totalOrdered} items received`
-      }
-    }
-
-    await createPurchaseEvent({
-      purchase_id: purchaseId,
-      event_type: eventType,
-      event_title: eventTitle,
-      event_description: eventDescription,
-      new_status: purchase.status,
-      affected_items_count: affectedItems,
-      total_items_count: items.length,
-      created_by: 'system'
-    })
-
-    console.log(`Created receipt timeline event for ${purchaseId}: ${eventTitle}`)
-  } catch (error) {
-    console.error('Error creating receipt timeline event:', error)
-  }
-}
+// createReceiptTimelineEvent moved to purchases-utils.ts and imported above
+export { createReceiptTimelineEvent } from './purchases-utils'
 
 export async function deletePurchase(id: string): Promise<void> {
   const supabase = createClient()
@@ -877,244 +489,17 @@ export async function deletePurchase(id: string): Promise<void> {
   }
 }
 
-// Return functions
-export interface ProcessPurchaseReturnData {
-  purchase_id: string
-  return_reason: string
-  return_date: string
-  returned_by: string
-  items: {
-    item_id: string
-    return_quantity: number
-  }[]
-}
+// ProcessPurchaseReturnData type is now imported from purchases-types.ts
 
-// Timeline event types
-export interface PurchaseEvent {
-  id: string
-  purchase_id: string
-  event_type: 'order_placed' | 'partial_receipt' | 'full_receipt' | 'partial_return' | 'full_return' | 'cancelled' | 'status_change' | 'balance_resolved' | 'payment_made' | 'payment_voided'
-  event_title: string
-  event_description?: string
-  previous_status?: string
-  new_status?: string
-  affected_items_count?: number
-  total_items_count?: number
-  return_reason?: string
-  return_amount?: number
-  payment_amount?: number
-  payment_method?: string
-  payment_id?: string
-  metadata?: any
-  created_by?: string
-  created_at: string
-  event_date: string
-}
+// PurchaseEvent type is now imported from purchases-types.ts
 
-// Payment types
-export interface PurchasePayment {
-  id: string
-  purchase_id: string
-  amount: number
-  payment_method: 'cash' | 'bank_transfer' | 'check' | 'credit_card' | 'other'
-  payment_date: string
-  notes?: string
-  journal_entry_id?: string
-  created_by?: string
-  status: 'active' | 'void'
-  created_at: string
-  updated_at: string
-}
+// Payment types and constants are now imported from purchases-types.ts
 
-export interface CreatePurchasePaymentData {
-  purchase_id: string
-  amount: number
-  payment_method: 'cash' | 'bank_transfer' | 'check' | 'credit_card' | 'other'
-  payment_date: string
-  notes?: string
-  created_by: string
-}
+// createPurchaseEvent moved to purchases-core.ts and imported above
+export { createPurchaseEvent } from './purchases-core'
 
-// Payment methods for UI
-export const PAYMENT_METHODS = [
-  { value: 'cash', label: 'Cash' },
-  { value: 'bank_transfer', label: 'Bank Transfer' },
-  { value: 'check', label: 'Check' },
-  { value: 'credit_card', label: 'Credit Card' },
-  { value: 'other', label: 'Other' },
-] as const
-
-// Create timeline event function
-export async function createPurchaseEvent(eventData: {
-  purchase_id: string
-  event_type: PurchaseEvent['event_type']
-  event_title: string
-  event_description?: string
-  previous_status?: string
-  new_status?: string
-  affected_items_count?: number
-  total_items_count?: number
-  return_reason?: string
-  return_amount?: number
-  payment_amount?: number
-  payment_method?: string
-  payment_id?: string
-  metadata?: any
-  created_by?: string
-}): Promise<string> {
-  try {
-    const supabase = await createClient()
-    
-    const { data, error } = await supabase
-      .from('purchase_events')
-      .insert([eventData])
-      .select('id')
-      .single()
-
-    if (error) {
-      // Handle duplicate order_placed events gracefully
-      if (error.code === '23505' && eventData.event_type === 'order_placed') {
-        console.log(`Order placed event already exists for ${eventData.purchase_id}, skipping duplicate`)
-        // Return a placeholder ID since this is not an error
-        return 'duplicate-prevented'
-      }
-      
-      const errorMessage = error.message || JSON.stringify(error) || 'Unknown database error'
-      console.error('Error creating purchase event:', errorMessage)
-      throw new Error(`Failed to create purchase event: ${errorMessage}`)
-    }
-
-    return data.id
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 
-                        (error && typeof error === 'object' ? JSON.stringify(error) : 
-                         String(error) || 'Unknown error')
-    console.error('Error in createPurchaseEvent:', errorMessage)
-    throw new Error(`Error in createPurchaseEvent: ${errorMessage}`)
-  }
-}
-
-// Function to generate initial timeline events for existing purchases
-export async function generateInitialTimelineEvents(purchaseId: string): Promise<void> {
-  try {
-    const supabase = await createClient()
-    
-    // Enhanced check for existing timeline events with specific order_placed check
-    const { data: existingEvents } = await supabase
-      .from('purchase_events')
-      .select('id, event_type')
-      .eq('purchase_id', purchaseId)
-    
-    if (existingEvents && existingEvents.length > 0) {
-      console.log(`Timeline events already exist for ${purchaseId} (${existingEvents.length} events)`)
-      
-      // Check if there's already an order_placed event
-      const hasOrderPlaced = existingEvents.some(event => event.event_type === 'order_placed')
-      if (hasOrderPlaced) {
-        console.log(`Order placed event already exists for ${purchaseId}`)
-        return
-      }
-    }
-    
-    console.log(`Generating initial timeline events for ${purchaseId}...`)
-    
-    // Get purchase details
-    const { data: purchase, error: purchaseError } = await supabase
-      .from('purchases')
-      .select('*')
-      .eq('id', purchaseId)
-      .single()
-    
-    if (purchaseError || !purchase) {
-      console.error('Purchase not found:', purchaseError)
-      return
-    }
-    
-    // Get purchase items count
-    const { data: items } = await supabase
-      .from('purchase_items')
-      .select('quantity, received_quantity, returned_quantity')
-      .eq('purchase_id', purchaseId)
-    
-    const totalItems = items?.length || 0
-    const totalQuantity = items?.reduce((sum, item) => sum + item.quantity, 0) || 0
-    const totalReceived = items?.reduce((sum, item) => sum + item.received_quantity, 0) || 0
-    const totalReturned = items?.reduce((sum, item) => sum + item.returned_quantity, 0) || 0
-    
-    // Create order placed event
-    await createPurchaseEvent({
-      purchase_id: purchaseId,
-      event_type: 'order_placed',
-      event_title: 'Order Placed',
-      event_description: 'Purchase order created and sent to supplier',
-      new_status: 'pending',
-      total_items_count: totalItems,
-      created_by: 'system'
-    })
-    
-    // Create receipt events based on current status
-    if (purchase.status === 'partially_received' && totalReceived > 0) {
-      await createPurchaseEvent({
-        purchase_id: purchaseId,
-        event_type: 'partial_receipt',
-        event_title: 'Items Partially Received',
-        event_description: `${totalReceived} out of ${totalQuantity} items received`,
-        previous_status: 'pending',
-        new_status: 'partially_received',
-        affected_items_count: items?.filter(item => item.received_quantity > 0).length || 0,
-        total_items_count: totalItems,
-        created_by: 'system'
-      })
-    } else if (purchase.status === 'received' && totalReceived > 0) {
-      // For fully received orders, we might have had partial receipt first
-      if (totalReceived === totalQuantity) {
-        await createPurchaseEvent({
-          purchase_id: purchaseId,
-          event_type: 'full_receipt',
-          event_title: 'All Items Received',
-          event_description: 'All ordered items have been received and verified',
-          previous_status: 'pending',
-          new_status: 'received',
-          affected_items_count: totalItems,
-          total_items_count: totalItems,
-          created_by: 'system'
-        })
-      }
-    }
-    
-    // Create return events based on current status
-    if (purchase.status === 'partially_returned' && totalReturned > 0) {
-      await createPurchaseEvent({
-        purchase_id: purchaseId,
-        event_type: 'partial_return',
-        event_title: 'Partial Return Processed',
-        event_description: `${totalReturned} out of ${totalReceived} received items returned`,
-        previous_status: purchase.status === 'received' ? 'received' : 'partially_received',
-        new_status: 'partially_returned',
-        affected_items_count: items?.filter(item => item.returned_quantity > 0).length || 0,
-        return_reason: purchase.return_reason || 'Return processed (reason not specified)',
-        created_by: 'system'
-      })
-    } else if (purchase.status === 'returned' && totalReturned > 0) {
-      await createPurchaseEvent({
-        purchase_id: purchaseId,
-        event_type: 'full_return',
-        event_title: 'Return Completed',
-        event_description: `All received items (${totalReturned}) have been returned to supplier`,
-        previous_status: 'received',
-        new_status: 'returned',
-        affected_items_count: totalItems,
-        return_reason: purchase.return_reason || 'Full return processed (reason not specified)',
-        created_by: 'system'
-      })
-    }
-    
-    console.log(`Generated initial timeline events for ${purchaseId}`)
-  } catch (error) {
-    console.error('Error generating initial timeline events:', error)
-    throw error
-  }
-}
+// generateInitialTimelineEvents moved to purchases-utils.ts and imported above
+export { generateInitialTimelineEvents } from './purchases-utils'
 
 // Enhanced getPurchaseTimeline with automatic event generation
 export async function getPurchaseTimeline(purchaseId: string): Promise<PurchaseEvent[]> {
@@ -1414,126 +799,13 @@ export async function processPurchaseReturn(
 }
 
 // Helper function to calculate purchase status after return processing
-async function calculatePurchaseReturnStatus(purchaseId: string): Promise<'pending' | 'partially_received' | 'received' | 'partially_returned' | 'returned'> {
-  const supabase = await createClient()
+// This function has been moved to purchases-calculations.ts
 
-  // Get all items for this purchase with full details
-  const { data: items, error } = await supabase
-    .from('purchase_items')
-    .select('quantity, received_quantity, returned_quantity')
-    .eq('purchase_id', purchaseId)
+// getPurchaseStats moved to purchases-utils.ts and imported above
+export { getPurchaseStats } from './purchases-utils'
 
-  if (error) {
-    console.error('Error fetching items for status calculation:', error)
-    throw new Error('Failed to calculate return status')
-  }
-
-  // Calculate totals
-  const totalOrdered = items.reduce((sum, item) => sum + item.quantity, 0)
-  const totalReceived = items.reduce((sum, item) => sum + item.received_quantity, 0)
-  const totalReturned = items.reduce((sum, item) => sum + item.returned_quantity, 0)
-  const netReceived = totalReceived - totalReturned // Items that are currently in possession
-
-  // Determine status based on comprehensive business logic
-  if (totalReturned === 0) {
-    // No returns yet - use standard receipt logic
-    if (totalReceived === 0) {
-      return 'pending'
-    } else if (totalReceived < totalOrdered) {
-      return 'partially_received'
-  } else {
-      return 'received'
-    }
-  } else {
-    // Returns have occurred - determine appropriate status
-    if (netReceived === 0) {
-      // All received items have been returned
-      if (totalReceived === totalOrdered) {
-        // All ordered items were received and then returned = Full Return
-        return 'returned'
-      } else {
-        // Only some items were received and then returned = Back to Pending
-        return 'pending'
-      }
-    } else {
-      // Some items are still in possession after returns
-      if (totalReceived === totalOrdered) {
-        // All items were received, but some returned = Partial Return
-        return 'partially_returned'
-      } else {
-        // Still have partial receipt situation with some returns = Partial Receipt
-        return 'partially_received'
-      }
-    }
-  }
-}
-
-// Statistics functions
-export async function getPurchaseStats(): Promise<{
-  totalPurchases: number
-  totalAmount: number
-  pendingPurchases: number
-  receivedPurchases: number
-  partiallyReceivedPurchases: number
-  cancelledPurchases: number
-}> {
-  const supabase = createClient()
-
-  const { data, error } = await supabase
-    .from('purchases')
-    .select('status, total_amount')
-    .neq('status', 'returned') // Exclude returned purchases from main stats
-
-  if (error) {
-    console.error('Error fetching purchase stats:', error)
-    throw new Error('Failed to fetch purchase stats')
-  }
-
-  const purchases = data || []
-  
-  return {
-    totalPurchases: purchases.length,
-    totalAmount: purchases.reduce((sum, p) => sum + p.total_amount, 0),
-    pendingPurchases: purchases.filter(p => p.status === 'pending').length,
-    receivedPurchases: purchases.filter(p => p.status === 'received').length,
-    partiallyReceivedPurchases: purchases.filter(p => p.status === 'partially_received').length,
-    cancelledPurchases: purchases.filter(p => p.status === 'cancelled').length
-  }
-}
-
-// Utility function to backfill timeline events for all purchases
-export async function backfillAllTimelineEvents(): Promise<void> {
-  try {
-    const supabase = await createClient()
-    
-    // Get all purchases that don't have timeline events
-    const { data: purchases, error } = await supabase
-      .from('purchases')
-      .select('id')
-      .order('created_at', { ascending: true })
-    
-    if (error) {
-      console.error('Error fetching purchases for backfill:', error)
-      return
-    }
-    
-    console.log(`Starting backfill for ${purchases?.length || 0} purchases...`)
-    
-    for (const purchase of purchases || []) {
-      try {
-        await generateInitialTimelineEvents(purchase.id)
-        console.log(`✓ Backfilled timeline for ${purchase.id}`)
-      } catch (error) {
-        console.error(`✗ Failed to backfill timeline for ${purchase.id}:`, error)
-      }
-    }
-    
-    console.log('Timeline backfill completed!')
-  } catch (error) {
-    console.error('Error in backfillAllTimelineEvents:', error)
-    throw error
-  }
-}
+// backfillAllTimelineEvents moved to purchases-utils.ts and imported above
+export { backfillAllTimelineEvents } from './purchases-utils'
 
 // Enhanced function to update received quantities and create timeline events
 export async function updatePurchaseReceipt(
@@ -1886,383 +1158,10 @@ export async function voidPurchasePayment(paymentId: string, voidReason?: string
   return voidedPayment
 }
 
-// Calculate net payment amount (original amount minus return amount)
-export function calculateNetPaymentAmount(purchase: PurchaseWithItems): {
-  originalAmount: number
-  returnAmount: number
-  netAmount: number
-} {
-  const originalAmount = purchase.total_amount
-  const returnAmount = purchase.items.reduce((sum, item) => 
-    sum + (item.returned_quantity * item.purchase_price), 0
-  )
-  const netAmount = originalAmount - returnAmount
-
-  return {
-    originalAmount,
-    returnAmount,
-    netAmount: Math.max(0, netAmount) // Ensure non-negative
-  }
-}
-
-// Calculate payment status considering returns
-export function calculatePaymentStatus(purchase: PurchaseWithItems, amountPaid: number): {
-  status: 'unpaid' | 'partial' | 'paid' | 'overpaid'
-  remainingAmount: number
-  overpaidAmount: number
-} {
-  const { netAmount } = calculateNetPaymentAmount(purchase)
-  
-  if (amountPaid === 0) {
-    return {
-      status: 'unpaid',
-      remainingAmount: netAmount,
-      overpaidAmount: 0
-    }
-  }
-  
-  if (amountPaid < netAmount) {
-    return {
-      status: 'partial',
-      remainingAmount: netAmount - amountPaid,
-      overpaidAmount: 0
-    }
-  }
-  
-  if (amountPaid === netAmount) {
-    return {
-      status: 'paid',
-      remainingAmount: 0,
-      overpaidAmount: 0
-    }
-  }
-  
-  // amountPaid > netAmount
-    return {
-      status: 'overpaid',
-      remainingAmount: 0,
-      overpaidAmount: amountPaid - netAmount
-    }
-}
-
-// NEW PAYMENT STATUS FUNCTIONS FOR PROPER BUSINESS LOGIC
-
-/**
- * Calculate payment status based on original purchase amount only
- * This shows whether the original purchase has been paid for
- */
-export function calculateOriginalPaymentStatus(purchase: PurchaseWithItems, amountPaid: number): {
-  status: 'unpaid' | 'partial' | 'paid' | 'overpaid'
-  remainingAmount: number
-  overpaidAmount: number
-  progressPercentage: number
-} {
-  const originalAmount = purchase.total_amount
-  
-  if (amountPaid === 0) {
-    return {
-      status: 'unpaid',
-      remainingAmount: originalAmount,
-      overpaidAmount: 0,
-      progressPercentage: 0
-    }
-  }
-  
-  if (amountPaid < originalAmount) {
-    return {
-      status: 'partial',
-      remainingAmount: originalAmount - amountPaid,
-      overpaidAmount: 0,
-      progressPercentage: Math.round((amountPaid / originalAmount) * 100)
-    }
-  }
-  
-  if (amountPaid === originalAmount) {
-    return {
-      status: 'paid',
-      remainingAmount: 0,
-      overpaidAmount: 0,
-      progressPercentage: 100
-    }
-  }
-  
-  // amountPaid > originalAmount - true overpayment
-  return {
-    status: 'overpaid',
-    remainingAmount: 0,
-    overpaidAmount: amountPaid - originalAmount,
-    progressPercentage: Math.round((amountPaid / originalAmount) * 100)
-  }
-}
-
-/**
- * Calculate refund amount due based on returned items, actual refund status, and chronological order
- * This is separate from payment status
- */
-export function calculateRefundDue(purchase: PurchaseWithItems, amountPaid: number, returns?: PurchaseReturn[], timeline?: PurchaseEvent[]): {
-  refundDue: number
-  returnAmount: number
-  hasReturns: boolean
-  refundedAmount: number
-  pendingRefundAmount: number
-  paymentMadeAfterReturns: boolean
-} {
-  const { returnAmount } = calculateNetPaymentAmount(purchase)
-  const hasReturns = returnAmount > 0
-  
-  // Calculate actual refund status from returns data
-  let refundedAmount = 0
-  let pendingRefundAmount = 0
-  
-  if (returns && returns.length > 0) {
-    returns.forEach(returnItem => {
-      if (returnItem.refund_status === 'completed') {
-        refundedAmount += returnItem.refund_amount || 0
-      } else if (returnItem.refund_status === 'pending' || returnItem.refund_status === 'processing') {
-        pendingRefundAmount += returnItem.total_amount || 0
-      }
-    })
-  }
-  
-  // Check chronological order: were payments made after returns?
-  let paymentMadeAfterReturns = false
-  if (timeline && timeline.length > 0 && hasReturns) {
-    // Sort events by date
-    const sortedEvents = [...timeline].sort((a, b) => 
-      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-    )
-    
-    // Find the last return event and first payment event
-    const lastReturnEvent = sortedEvents
-      .filter(e => e.event_type === 'partial_return' || e.event_type === 'full_return')
-      .pop()
-    
-    const firstPaymentEvent = sortedEvents
-      .find(e => e.event_type === 'payment_made')
-    
-    // If there's a payment made after the last return, it was likely adjusted
-    if (lastReturnEvent && firstPaymentEvent) {
-      paymentMadeAfterReturns = new Date(firstPaymentEvent.created_at) > new Date(lastReturnEvent.created_at)
-    }
-  }
-  
-  // Calculate remaining refund due
-  let refundDue = 0
-  if (hasReturns && amountPaid > 0) {
-    if (paymentMadeAfterReturns) {
-      // Payment was made after returns, likely adjusted - no refund due unless explicitly processed
-      refundDue = 0
-    } else {
-      // Payment was made before returns - refund may be due
-      const maxRefundable = Math.min(returnAmount, amountPaid)
-      refundDue = Math.max(0, maxRefundable - refundedAmount)
-    }
-  }
-  
-  return {
-    refundDue,
-    returnAmount,
-    hasReturns,
-    refundedAmount,
-    pendingRefundAmount,
-    paymentMadeAfterReturns
-  }
-}
-
-/**
- * Calculate payment status based on net amount (considering returns and chronology)
- */
-export function calculateNetPaymentStatus(purchase: PurchaseWithItems, amountPaid: number, timeline?: PurchaseEvent[]): {
-  status: 'unpaid' | 'partial' | 'paid' | 'overpaid'
-  remainingAmount: number
-  overpaidAmount: number
-  progressPercentage: number
-  baseAmount: number
-  paymentMadeAfterReturns: boolean
-} {
-  const { originalAmount, returnAmount, netAmount } = calculateNetPaymentAmount(purchase)
-  
-  // Check if payment was made after returns
-  let paymentMadeAfterReturns = false
-  if (timeline && timeline.length > 0 && returnAmount > 0) {
-    const sortedEvents = [...timeline].sort((a, b) => 
-      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-    )
-    
-    const lastReturnEvent = sortedEvents
-      .filter(e => e.event_type === 'partial_return' || e.event_type === 'full_return')
-      .pop()
-    
-    const firstPaymentEvent = sortedEvents
-      .find(e => e.event_type === 'payment_made')
-    
-    if (lastReturnEvent && firstPaymentEvent) {
-      paymentMadeAfterReturns = new Date(firstPaymentEvent.created_at) > new Date(lastReturnEvent.created_at)
-    }
-  }
-  
-  // Use net amount as base when payment was made after returns, otherwise use original amount
-  const baseAmount = paymentMadeAfterReturns ? netAmount : originalAmount
-  
-  let status: 'unpaid' | 'partial' | 'paid' | 'overpaid'
-  let remainingAmount = 0
-  let overpaidAmount = 0
-  let progressPercentage = 0
-  
-  if (amountPaid === 0) {
-    status = 'unpaid'
-    remainingAmount = baseAmount
-    progressPercentage = 0
-  } else if (amountPaid < baseAmount) {
-    status = 'partial'
-    remainingAmount = baseAmount - amountPaid
-    progressPercentage = Math.round((amountPaid / baseAmount) * 100)
-  } else if (amountPaid === baseAmount) {
-    status = 'paid'
-    remainingAmount = 0
-    progressPercentage = 100
-  } else {
-    status = 'overpaid'
-    overpaidAmount = amountPaid - baseAmount
-    progressPercentage = Math.round((amountPaid / baseAmount) * 100)
-  }
-  
-  return {
-    status,
-    remainingAmount,
-    overpaidAmount,
-    progressPercentage,
-    baseAmount,
-    paymentMadeAfterReturns
-  }
-}
-
-/**
- * Complete payment status calculation with proper business logic
- * Separates payment status from refund obligations
- */
-export function calculateCompletePaymentStatus(purchase: PurchaseWithItems, amountPaid: number, returns?: PurchaseReturn[], timeline?: PurchaseEvent[]): {
-  // Original payment status
-  paymentStatus: 'unpaid' | 'partial' | 'paid' | 'overpaid'
-  remainingAmount: number
-  overpaidAmount: number
-  progressPercentage: number
-  
-  // Refund information
-  refundDue: number
-  returnAmount: number
-  hasReturns: boolean
-  refundedAmount: number
-  pendingRefundAmount: number
-  paymentMadeAfterReturns: boolean
-  
-  // Display information
-  displayStatus: string
-  displayBadgeColor: string
-  showRefundSection: boolean
-} {
-  // Use the new net payment status calculation
-  const netPayment = calculateNetPaymentStatus(purchase, amountPaid, timeline)
-  const refundInfo = calculateRefundDue(purchase, amountPaid, returns, timeline)
-  
-  // Determine display status and colors
-  let displayStatus: string
-  let displayBadgeColor: string
-  
-  if (refundInfo.paymentMadeAfterReturns) {
-    // Payment was made after returns - treat as adjusted payment, no refund confusion
-    switch (netPayment.status) {
-      case 'unpaid':
-        displayStatus = 'Unpaid'
-        displayBadgeColor = 'red'
-        break
-      case 'partial':
-        displayStatus = 'Partially Paid'
-        displayBadgeColor = 'yellow'
-        break
-      case 'paid':
-        displayStatus = 'Paid'
-        displayBadgeColor = 'green'
-        break
-      case 'overpaid':
-        displayStatus = 'Overpaid'
-        displayBadgeColor = 'purple'
-        break
-    }
-  } else if (refundInfo.refundedAmount > 0 && refundInfo.refundDue === 0) {
-    // Refunds have been completed
-    if (netPayment.status === 'paid') {
-      displayStatus = 'Paid - Refunded'
-      displayBadgeColor = 'green' // Green for completed state
-    } else if (netPayment.status === 'overpaid') {
-      displayStatus = 'Overpaid - Refunded'
-      displayBadgeColor = 'green' // Green for completed state
-    } else {
-      displayStatus = 'Partial - Refunded'
-      displayBadgeColor = 'green'
-    }
-  } else if (refundInfo.refundDue > 0) {
-    // There's still a refund due
-    if (netPayment.status === 'paid') {
-      displayStatus = 'Paid - Refund Due'
-      displayBadgeColor = 'orange' // Orange for refund due
-    } else if (netPayment.status === 'overpaid') {
-      displayStatus = 'Overpaid - Refund Due'
-      displayBadgeColor = 'orange' // Orange for refund due
-    } else {
-      displayStatus = 'Partial - Refund Due'
-      displayBadgeColor = 'orange'
-    }
-  } else {
-    // No refunds involved - standard status
-    switch (netPayment.status) {
-      case 'unpaid':
-        displayStatus = 'Unpaid'
-        displayBadgeColor = 'red'
-        break
-      case 'partial':
-        displayStatus = 'Partially Paid'
-        displayBadgeColor = 'yellow'
-        break
-      case 'paid':
-        displayStatus = 'Paid'
-        displayBadgeColor = 'green'
-        break
-      case 'overpaid':
-        displayStatus = 'Overpaid'
-        displayBadgeColor = 'purple'
-        break
-    }
-  }
-  
-  return {
-    // Payment status (now using net calculation)
-    paymentStatus: netPayment.status,
-    remainingAmount: netPayment.remainingAmount,
-    overpaidAmount: netPayment.overpaidAmount,
-    progressPercentage: netPayment.progressPercentage,
-    
-    // Refund information
-    refundDue: refundInfo.refundDue,
-    returnAmount: refundInfo.returnAmount,
-    hasReturns: refundInfo.hasReturns,
-    refundedAmount: refundInfo.refundedAmount,
-    pendingRefundAmount: refundInfo.pendingRefundAmount,
-    paymentMadeAfterReturns: refundInfo.paymentMadeAfterReturns,
-    
-    // Display information
-    displayStatus,
-    displayBadgeColor,
-    showRefundSection: (refundInfo.refundDue > 0 || refundInfo.refundedAmount > 0) && !refundInfo.paymentMadeAfterReturns
-  }
-}
+// Payment calculation functions have been moved to purchases-calculations.ts
 
 // Get purchase with payment information and net calculations
-export async function getPurchaseWithPayments(purchaseId: string): Promise<PurchaseWithItems & { 
-  amount_paid?: number
-  payment_status?: string
-  payments?: PurchasePayment[]
-} | null> {
+export async function getPurchaseWithPayments(purchaseId: string): Promise<PurchaseWithPayments | null> {
   const [purchase, payments] = await Promise.all([
     getPurchaseById(purchaseId),
     getPurchasePayments(purchaseId)
@@ -2276,201 +1175,8 @@ export async function getPurchaseWithPayments(purchaseId: string): Promise<Purch
   }
 }
 
-// Utility function to fix all purchase statuses using the new logic
-// Function to backfill payment timeline events for existing payments
-export async function backfillPaymentTimelineEvents(purchaseId?: string): Promise<void> {
-  try {
-    const supabase = createClient()
-    
-    // Get payments to backfill
-    let paymentsQuery = supabase
-      .from('purchase_payments')
-      .select('*, purchases!inner(supplier_name)')
-      .eq('status', 'active') // Only active payments
-      .order('created_at', { ascending: true })
-    
-    if (purchaseId) {
-      paymentsQuery = paymentsQuery.eq('purchase_id', purchaseId)
-    }
-    
-    const { data: payments, error: paymentsError } = await paymentsQuery
-    
-    if (paymentsError) {
-      console.error('Error fetching payments for backfill:', paymentsError)
-      return
-    }
-    
-    if (!payments || payments.length === 0) {
-      console.log(`No payments found ${purchaseId ? `for purchase ${purchaseId}` : 'for backfill'}`)
-      return
-    }
-    
-    console.log(`🔄 Backfilling timeline events for ${payments.length} payments...`)
-    
-    for (const payment of payments) {
-      try {
-        // Check if timeline event already exists for this payment
-        const { data: existingEvents } = await supabase
-          .from('purchase_events')
-          .select('id')
-          .eq('purchase_id', payment.purchase_id)
-          .eq('payment_id', payment.id)
-          .eq('event_type', 'payment_made')
-        
-        if (existingEvents && existingEvents.length > 0) {
-          console.log(`⏭️ Timeline event already exists for payment ${payment.id}`)
-          continue
-        }
-        
-        // Get purchase details for payment status calculation
-        const purchase = await getPurchaseById(payment.purchase_id)
-        if (!purchase) {
-          console.log(`⚠️ Purchase not found for payment ${payment.id}`)
-          continue
-        }
-        
-        // Calculate payment status at time of this payment
-        const { netAmount } = calculateNetPaymentAmount(purchase)
-        const { status: paymentStatus } = calculatePaymentStatus(purchase, payment.amount)
-        
-        const paymentStatusText = paymentStatus === 'paid' ? 'fully paid' : 
-                                 paymentStatus === 'partial' ? 'partially paid' : 
-                                 paymentStatus === 'overpaid' ? 'overpaid' : 'paid'
-        
-        // Create timeline event
-        await createPurchaseEvent({
-          purchase_id: payment.purchase_id,
-          event_type: 'payment_made',
-          event_title: `Payment Received`,
-          event_description: `Payment of ৳${payment.amount.toLocaleString()} received via ${payment.payment_method.replace('_', ' ')}. Purchase is now ${paymentStatusText}.`,
-          payment_amount: payment.amount,
-          payment_method: payment.payment_method,
-          payment_id: payment.id,
-          new_status: paymentStatus,
-          created_by: payment.created_by || 'system'
-        })
-        
-        console.log(`✅ Created timeline event for payment ${payment.id}`)
-      } catch (error) {
-        console.error(`❌ Failed to create timeline event for payment ${payment.id}:`, error)
-      }
-    }
-    
-    console.log(`🎉 Finished backfilling payment timeline events`)
-  } catch (error) {
-    console.error('Error in backfillPaymentTimelineEvents:', error)
-    throw error
-  }
-}
+// backfillPaymentTimelineEvents moved to purchases-utils.ts and imported above
+export { backfillPaymentTimelineEvents } from './purchases-utils'
 
-export async function fixAllPurchaseStatuses(): Promise<void> {
-  const supabase = createClient()
-  
-  try {
-    console.log('🔄 Starting purchase status correction...')
-    
-    // Get all purchases with their item data
-    const { data: purchases, error } = await supabase
-      .from('purchases')
-      .select(`
-        id,
-        status,
-        purchase_items (
-          quantity,
-          received_quantity,
-          returned_quantity
-        )
-      `)
-    
-    if (error) {
-      console.error('Error fetching purchases for status fix:', error)
-      throw new Error('Failed to fetch purchases')
-    }
-    
-    let fixedCount = 0
-    
-    for (const purchase of purchases || []) {
-      const items = purchase.purchase_items || []
-      
-      // Calculate correct status using our new logic
-      const totalOrdered = items.reduce((sum: number, item: any) => sum + item.quantity, 0)
-      const totalReceived = items.reduce((sum: number, item: any) => sum + item.received_quantity, 0)
-      const totalReturned = items.reduce((sum: number, item: any) => sum + item.returned_quantity, 0)
-      const netReceived = totalReceived - totalReturned
-      
-      let correctStatus: string
-      
-      if (totalReturned === 0) {
-        // No returns yet - use standard receipt logic
-        if (totalReceived === 0) {
-          correctStatus = 'pending'
-        } else if (totalReceived < totalOrdered) {
-          correctStatus = 'partially_received'
-        } else {
-          correctStatus = 'received'
-        }
-      } else {
-        // Returns have occurred - determine appropriate status
-        if (netReceived === 0) {
-          // All received items have been returned
-          if (totalReceived === totalOrdered) {
-            // All ordered items were received and then returned = Full Return
-            correctStatus = 'returned'
-          } else {
-            // Only some items were received and then returned = Back to Pending
-            correctStatus = 'pending'
-          }
-        } else {
-          // Some items are still in possession after returns
-          if (totalReceived === totalOrdered) {
-            // All items were received, but some returned = Partial Return
-            correctStatus = 'partially_returned'
-          } else {
-            // Still have partial receipt situation with some returns = Partial Receipt
-            correctStatus = 'partially_received'
-          }
-        }
-      }
-      
-      // Update status if it's incorrect
-      if (purchase.status !== correctStatus) {
-        console.log(`🔧 Fixing ${purchase.id}: ${purchase.status} → ${correctStatus}`)
-        
-        const { error: updateError } = await supabase
-          .from('purchases')
-          .update({ 
-            status: correctStatus,
-            last_updated: new Date().toISOString()
-          })
-          .eq('id', purchase.id)
-        
-        if (updateError) {
-          console.error(`Failed to update ${purchase.id}:`, updateError)
-        } else {
-          fixedCount++
-          
-          // Create a timeline event for the status correction
-          try {
-            await createPurchaseEvent({
-              purchase_id: purchase.id,
-              event_type: 'status_change',
-              event_title: 'Status Corrected',
-              event_description: `Status corrected from ${purchase.status} to ${correctStatus} (system update)`,
-              previous_status: purchase.status,
-              new_status: correctStatus,
-              created_by: 'system'
-            })
-          } catch (eventError) {
-            console.error(`Failed to create timeline event for ${purchase.id}:`, eventError)
-            // Continue anyway
-          }
-        }
-      }
-    }
-    
-    console.log(`✅ Purchase status correction completed. Fixed ${fixedCount} purchases.`)
-  } catch (error) {
-    console.error('Error fixing purchase statuses:', error)
-    throw error
-  }
-} 
+// fixAllPurchaseStatuses moved to purchases-utils.ts and imported above
+export { fixAllPurchaseStatuses } from './purchases-utils' 
