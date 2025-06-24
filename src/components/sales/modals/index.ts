@@ -1,0 +1,1 @@
+export { AddCustomerModal, default as AddCustomerModalDefault } from './AddCustomerModal'
