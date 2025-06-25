@@ -341,13 +341,11 @@ export function useSaleSubmission({
     resetForm: () => void,
     setSelectedWarehouse: (value: string) => void,
     setSelectedCustomer: (value: string) => void,
-    setSelectedPaymentMethod: (value: string) => void,
-    setSearchTerm: (value: string) => void
+    setSelectedPaymentMethod: (value: string) => void
   ) => {
     setShowSuccess(false)
     setSaleResult({ success: false, message: '' })
     clearCart()
-    setSearchTerm('')
     resetForm()
     setSelectedWarehouse('')
     setSelectedCustomer('')
