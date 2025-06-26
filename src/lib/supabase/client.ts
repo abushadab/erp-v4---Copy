@@ -21,8 +21,8 @@ export function createClient() {
         detectSessionInUrl: true,
         autoRefreshToken: true,
         // Production-optimized settings
-        flowType: 'pkce',
-        debug: false
+        flowType: 'implicit',
+        debug: true
       },
       global: {
         headers: {
