@@ -23,25 +23,15 @@ export default function UpdatePasswordPage() {
   const supabase = createClient()
 
   useEffect(() => {
-    const init = async () => {
-      // If we haven't yet exchanged the code, attempt it
-      const url = new URL(window.location.href)
-      const code = url.searchParams.get('code')
-      if (code) {
-        try {
-          await supabase.auth.exchangeCodeForSession(code)
-        } catch (err) {
-          console.error('Failed to exchange code for session', err)
-        }
-      }
-
+    // Ensure user is logged in via the recovery token; if not, redirect to login
+    const checkSession = async () => {
       const { data } = await supabase.auth.getSession()
       if (!data.session) {
         router.push('/login')
       }
     }
 
-    init()
+    checkSession()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
