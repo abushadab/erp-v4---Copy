@@ -1,0 +1,1 @@
+export { VariationsTable } from './VariationsTable'

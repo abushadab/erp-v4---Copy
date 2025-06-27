@@ -1,1 +1,5 @@
+export { ProductHeader } from './ProductHeader'
+export { ProductSummary } from './ProductSummary'
+export { ProductStatusMessages } from './ProductStatusMessages'
+export { ActionButtons } from './ActionButtons'
 export { AttributeValuesEditor } from './AttributeValuesEditor'
