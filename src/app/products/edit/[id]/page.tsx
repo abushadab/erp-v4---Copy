@@ -441,7 +441,7 @@ export default function EditProductPage() {
                     status: productForm.form.status,
                     sku: productForm.form.sku,
                     price: productForm.form.sellingPrice,
-                    parent_sku: productForm.form.parentSku
+                    parent_sku: productForm.form.parentSku,
                     variations: productForm.form.variations.map(v => ({
                       id: v.id,
                       sku: v.sku,
