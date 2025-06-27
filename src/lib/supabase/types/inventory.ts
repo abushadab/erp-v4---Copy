@@ -286,14 +286,14 @@ export interface InventoryFunctions {
   transfer_stock_between_warehouses: {
     Args: {
       p_product_id: string
-      p_variation_id: string
+      p_variation_id?: string
       p_from_warehouse_id: string
       p_to_warehouse_id: string
       p_quantity: number
-      p_reference_id: string
-      p_reason: string
-      p_created_by: string
-      p_notes: string
+      p_reference_id?: string
+      p_reason?: string
+      p_created_by?: string
+      p_notes?: string
     }
     Returns: boolean
   }
@@ -315,13 +315,13 @@ export interface InventoryFunctions {
     Args: {
       p_product_id: string
       p_warehouse_id: string
-      p_variation_id: string
+      p_variation_id?: string
       p_quantity_change: number
-      p_movement_type: string
-      p_reference_id: string
-      p_reason: string
-      p_created_by: string
-      p_notes: string
+      p_movement_type?: string
+      p_reference_id?: string
+      p_reason?: string
+      p_created_by?: string
+      p_notes?: string
     }
     Returns: boolean
   }
