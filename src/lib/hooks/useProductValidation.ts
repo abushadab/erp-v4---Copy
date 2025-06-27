@@ -2,13 +2,14 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { toast } from 'sonner'
-import { useProductData } from '@/lib/hooks/useProductData'
+import { validateSku as validateSkuUnique } from '@/lib/utils/skuValidation'
 import type { ProductVariation } from '@/lib/types'
 
 interface ValidationState {
   isChecking: boolean
-  isValid: boolean | null
+  isValid: boolean | null  // null = unknown/error, true = valid, false = invalid
   message: string
+  isError?: boolean  // indicates if the validation failed due to an error vs invalid SKU
 }
 
 interface ProductForm {
@@ -35,18 +36,19 @@ interface VariationForm {
 }
 
 export function useProductValidation(productId: string) {
-  const { validateSku: validateSkuUnique } = useProductData()
   
   const [skuValidation, setSkuValidation] = useState<ValidationState>({
     isChecking: false,
     isValid: null,
-    message: ''
+    message: '',
+    isError: false
   })
   
   const [variationSkuValidation, setVariationSkuValidation] = useState<ValidationState>({
     isChecking: false,
     isValid: null,
-    message: ''
+    message: '',
+    isError: false
   })
   
   const [errors, setErrors] = useState<string[]>([])
@@ -63,9 +65,9 @@ export function useProductValidation(productId: string) {
   ) => {
     if (!sku.trim()) {
       if (isVariation) {
-        setVariationSkuValidation({ isChecking: false, isValid: null, message: '' })
+        setVariationSkuValidation({ isChecking: false, isValid: null, message: '', isError: false })
       } else {
-        setSkuValidation({ isChecking: false, isValid: null, message: '' })
+        setSkuValidation({ isChecking: false, isValid: null, message: '', isError: false })
       }
       return
     }
@@ -87,7 +89,8 @@ export function useProductValidation(productId: string) {
         setValidation({ 
           isChecking: false, 
           isValid: false, 
-          message: 'SKU already exists in another variation'
+          message: 'SKU already exists in another variation',
+          isError: false
         })
         return
       }
@@ -99,16 +102,28 @@ export function useProductValidation(productId: string) {
         setValidation({ 
           isChecking: false, 
           isValid: false, 
-          message: 'SKU already exists' 
+          message: 'SKU already exists',
+          isError: false
         })
       } else {
-        setValidation({ isChecking: false, isValid: true, message: 'SKU is available' })
+        setValidation({ 
+          isChecking: false, 
+          isValid: true, 
+          message: 'SKU is available',
+          isError: false
+        })
       }
     } catch (error) {
       console.error('Error validating SKU:', error)
-      setValidation({ isChecking: false, isValid: null, message: 'Could not validate SKU' })
+      const errorMessage = error instanceof Error ? error.message : 'Could not validate SKU'
+      setValidation({ 
+        isChecking: false, 
+        isValid: null, 
+        message: errorMessage,
+        isError: true  // Mark as error so UI can handle differently
+      })
     }
-  }, [validateSkuUnique, productId])
+  }, [productId])
 
   const validateForm = useCallback((form: ProductForm) => {
     const newErrors: string[] = []
@@ -168,8 +183,8 @@ export function useProductValidation(productId: string) {
   }, [])
 
   const resetValidation = useCallback(() => {
-    setSkuValidation({ isChecking: false, isValid: null, message: '' })
-    setVariationSkuValidation({ isChecking: false, isValid: null, message: '' })
+    setSkuValidation({ isChecking: false, isValid: null, message: '', isError: false })
+    setVariationSkuValidation({ isChecking: false, isValid: null, message: '', isError: false })
     setErrors([])
   }, [])
 

@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import { useRouter } from 'next/navigation'
 import { ArrowLeft, Plus, Trash2, ShoppingCart, Calendar, Package, Box, Search, X, ChevronRight } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -39,461 +38,94 @@ import {
 } from "@/components/ui/dialog"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { DatePicker } from "@/components/ui/date-picker"
-import { toast } from "sonner"
 
-// Supabase imports
+// Custom hooks and utilities
+import { usePurchaseFormData, useItemSelection, usePurchaseForm } from "@/hooks/purchases"
+import { useCurrentUser } from "@/hooks/useCurrentUser"
 import { 
-  getSuppliers, 
-  getWarehouses, 
-  createPurchase,
-  type DatabaseSupplier, 
-  type DatabaseWarehouse,
-  type CreatePurchaseData,
-  type CreatePurchaseItemData
-} from "@/lib/supabase/purchases"
+  formatCurrency, 
+  isPackaging, 
+  getItemDisplayInfo, 
+  filterProducts, 
+  filterPackages 
+} from "@/lib/purchases/add-purchase-utils"
+
+// Type imports
 import { 
-  getProducts, 
-  getPackaging, 
-  getPackagingVariations,
   type DatabaseProduct, 
   type DatabasePackaging,
   type DatabaseProductVariation,
   type DatabasePackagingVariation
 } from "@/lib/supabase/queries"
-import { apiCache } from "@/lib/supabase/cache"
-import { logPurchaseCreate } from "@/lib/supabase/activity-logger"
 
-interface PurchaseItem {
-  itemId: string
-  itemType: 'product' | 'package'
-  itemName: string
-  quantity: number
-  purchasePrice: number
-  total: number
-  variationId?: string
-}
-
-interface SelectedItem {
-  id: string
-  type: 'product' | 'package'
-  name: string
-  sku?: string
-  variationId?: string
-  variationName?: string
-}
-
-interface PurchaseForm {
-  supplierId: string
-  warehouse: string
-  date: string
-  items: PurchaseItem[]
-}
-
-// Type guard to check if the item is a Packaging
-const isPackaging = (item: DatabasePackaging | DatabaseProduct): item is DatabasePackaging => {
-  return 'title' in item
-}
+// Note: PurchaseItem, SelectedItem, and PurchaseForm interfaces are now defined in the hooks
+// Type guard isPackaging is now imported from utils
 
 export default function CreatePurchasePage() {
-  const router = useRouter()
-  const [isLoading, setIsLoading] = React.useState(false)
-  const [dataLoading, setDataLoading] = React.useState(true)
-  const [isModalOpen, setIsModalOpen] = React.useState(false)
-  const [isVariationModalOpen, setIsVariationModalOpen] = React.useState(false)
-  const [selectedPackageForVariation, setSelectedPackageForVariation] = React.useState<DatabasePackaging | DatabaseProduct | null>(null)
-  const [activeTab, setActiveTab] = React.useState('products')
-  const [searchTerm, setSearchTerm] = React.useState('')
-  const [selectedItems, setSelectedItems] = React.useState<SelectedItem[]>([])
+  // Use custom hooks for all logic
+  const { suppliers, warehouses, products, packages, dataLoading } = usePurchaseFormData()
   
-  // Supabase data states
-  const [suppliers, setSuppliers] = React.useState<DatabaseSupplier[]>([])
-  const [warehouses, setWarehouses] = React.useState<DatabaseWarehouse[]>([])
-  const [products, setProducts] = React.useState<DatabaseProduct[]>([])
-  const [packages, setPackages] = React.useState<DatabasePackaging[]>([])
-  const [productVariations, setProductVariations] = React.useState<DatabaseProductVariation[]>([])
-  const [packageVariations, setPackageVariations] = React.useState<DatabasePackagingVariation[]>([])
+  const {
+    selectedItems,
+    isModalOpen,
+    isVariationModalOpen, 
+    selectedPackageForVariation,
+    activeTab,
+    searchTerm,
+    productVariations,
+    packageVariations,
+    setSelectedItems,
+    setIsModalOpen,
+    setIsVariationModalOpen,
+    setSelectedPackageForVariation,
+    setActiveTab,
+    setSearchTerm,
+    handleProductSelection,
+    handlePackageSelection,
+    handleVariationSelection,
+    handleProductVariationSelection,
+    handleProductSelectionWithVariations,
+    isItemSelected,
+    getSelectionSummary
+  } = useItemSelection()
   
-  // Deduplication cache and initial load tracker
-  const initialLoadTriggered = React.useRef(false)
-  const CACHE_DURATION = 30000 // 30 seconds
-  
-  // Global component cache to prevent duplicates across all instances
-  const componentCacheKey = 'purchases-add-data'
-  
-  // Remove local cache - use global apiCache instead
-  const [form, setForm] = React.useState<PurchaseForm>({
-    supplierId: '',
-    warehouse: '',
-    date: new Date().toISOString().split('T')[0],
-    items: []
-  })
+  const {
+    form,
+    isLoading,
+    setForm,
+    updateItemQuantity,
+    updateItemPrice,
+    removeItem,
+    handleSubmit,
+    getItemNameById,
+    addSelectedItemsToPurchase: addItemsToForm
+  } = usePurchaseForm()
 
-  // Load data from Supabase with enhanced deduplication using global cache
-  const loadData = React.useCallback(async (forceRefresh = false, isInitialLoad = false) => {
-    console.log('🔍 loadData called with forceRefresh:', forceRefresh, 'isInitialLoad:', isInitialLoad)
-    
-    // For initial load, we're already in loading state, so don't check dataLoading
-    // For subsequent calls, check if we're already loading to prevent overlapping requests
-    if (!isInitialLoad && dataLoading && !forceRefresh) {
-      console.log('⏳ Data already loading, skipping...')
-      return
-    }
+  // Get current user for additional validation
+  const { user, loading: userLoading } = useCurrentUser()
 
-    try {
-      // Only set loading to true if not already true (for initial load)
-      if (!dataLoading) {
-        setDataLoading(true)
-      }
-      
-      console.log('🔄 Fetching data using global cache')
-      
-      // Use global apiCache for all data fetching
-      const [suppliersData, warehousesData, productsData, packagesData] = await Promise.all([
-        apiCache.get('suppliers-active', () => getSuppliers()),
-        apiCache.get('warehouses-all', () => getWarehouses()),
-        apiCache.get('products-all', () => getProducts()),
-        apiCache.get('packaging-all', () => getPackaging())
-      ])
-      
-      const activeProducts = productsData.filter(p => p.status === 'active')
-      const activePackages = packagesData.filter(p => p.status === 'active')
-      
-      console.log('✅ Data fetched successfully using global cache', {
-        suppliers: suppliersData.length,
-        warehouses: warehousesData.length,
-        products: activeProducts.length,
-        packages: activePackages.length
-      })
-      
-      // Update state
-      setSuppliers(suppliersData)
-      setWarehouses(warehousesData)
-      setProducts(activeProducts)
-      setPackages(activePackages)
-      
-    } catch (error) {
-      console.error('❌ Error loading data:', error)
-      
-      // Provide fallback data on error
-      setSuppliers([])
-      setWarehouses([])
-      setProducts([])
-      setPackages([])
-      
-      toast.error('Failed to load data. Please refresh the page.')
-    } finally {
-      console.log('🏁 Request completed, setting loading to false')
-      setDataLoading(false)
-    }
-  }, []) // Remove dataLoading dependency to prevent circular re-creation
-
-  // Load initial data only once with enhanced protection against React Strict Mode
-  React.useEffect(() => {
-    console.log('🚀 useEffect triggered - mounting component')
-    
-    // Double protection against React Strict Mode
-    if (!initialLoadTriggered.current) {
-      console.log('🎯 First time loading - triggering data fetch')
-      initialLoadTriggered.current = true
-      loadData(false, true) // Pass isInitialLoad = true
-    } else {
-      console.log('⚠️ useEffect called again but initial load already triggered')
-    }
-  }, []) // Empty dependency array to run only on mount
+  // Data loading is now handled by usePurchaseFormData hook
 
   const selectedSupplier = suppliers.find(s => s.id === form.supplierId)
   const totalAmount = form.items.reduce((sum, item) => sum + item.total, 0)
 
-  // Filter products based on search term
-  const filteredProducts = products.filter(product => 
-    product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    product.sku?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    product.description?.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  // Filter products and packages using utility functions
+  const filteredProducts = filterProducts(products, searchTerm)
+  const filteredPackages = filterPackages(packages, searchTerm)
 
-  // Filter packages based on search term
-  const filteredPackages = packages.filter(packaging => 
-    packaging.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    packaging.sku?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    packaging.description?.toLowerCase().includes(searchTerm.toLowerCase())
-  )
-
-  const validateForm = () => {
-    if (!form.supplierId) {
-      toast.error('Please select a supplier')
-      return false
-    }
-    if (!form.warehouse) {
-      toast.error('Please select a warehouse')
-      return false
-    }
-    if (!form.date) {
-      toast.error('Please select a date')
-      return false
-    }
-    if (form.items.length === 0) {
-      toast.error('Please add at least one item')
-      return false
-    }
-
-    // Validate all items have quantity and price
-    for (const item of form.items) {
-      if (item.quantity <= 0) {
-        toast.error(`Please enter a valid quantity for ${item.itemName}`)
-        return false
-      }
-      if (item.purchasePrice <= 0) {
-        toast.error(`Please enter a valid purchase price for ${item.itemName}`)
-        return false
-      }
-    }
-
-    return true
-  }
-
-  const handleProductSelection = (product: DatabaseProduct) => {
-    const isSelected = selectedItems.some(selected => 
-      selected.id === product.id && selected.type === 'product'
-    )
-
-    if (isSelected) {
-      setSelectedItems(prev => prev.filter(selected => 
-        !(selected.id === product.id && selected.type === 'product')
-      ))
-    } else {
-      const newItem: SelectedItem = {
-        id: product.id,
-        type: 'product',
-        name: product.name,
-        sku: product.sku,
-      }
-      setSelectedItems(prev => [...prev, newItem])
-    }
-  }
-
-  const handlePackageSelection = (packaging: DatabasePackaging) => {
-    if (packaging.type === 'variable') {
-      setSelectedPackageForVariation(packaging)
-      setIsVariationModalOpen(true)
-    } else {
-      const isSelected = selectedItems.some(selected => 
-        selected.id === packaging.id && selected.type === 'package'
-      )
-
-      if (isSelected) {
-        setSelectedItems(prev => prev.filter(selected => 
-          !(selected.id === packaging.id && selected.type === 'package')
-        ))
-      } else {
-        const newItem: SelectedItem = {
-          id: packaging.id,
-          type: 'package',
-          name: packaging.title,
-          sku: packaging.sku,
-        }
-        setSelectedItems(prev => [...prev, newItem])
-      }
-    }
-  }
-
-  const handleVariationSelection = async (variation: DatabasePackagingVariation) => {
-    const packaging = selectedPackageForVariation as DatabasePackaging
-    // Create a display name from attribute values
-    const variationName = variation.attribute_values?.map(av => av.value_label).join(', ') || variation.sku
-    const newItem: SelectedItem = {
-      id: packaging.id,
-      type: 'package',
-      name: `${packaging.title} (${variationName})`,
-      sku: packaging.sku,
-      variationId: variation.id,
-      variationName: variationName,
-    }
-    setSelectedItems(prev => [...prev, newItem])
-    setIsVariationModalOpen(false)
-    setSelectedPackageForVariation(null)
-  }
-
-  const handleProductVariationSelection = async (variation: DatabaseProductVariation) => {
-    const product = selectedPackageForVariation as DatabaseProduct
-    // Create a display name from attribute values
-    const variationName = variation.attribute_values?.map(av => av.value_label).join(', ') || variation.sku
-    const newItem: SelectedItem = {
-      id: product.id,
-      type: 'product',
-      name: `${product.name} (${variationName})`,
-      sku: product.sku,
-      variationId: variation.id,
-      variationName: variationName,
-    }
-    setSelectedItems(prev => [...prev, newItem])
-    setIsVariationModalOpen(false)
-    setSelectedPackageForVariation(null)
-  }
-
-  // Cache for variations to prevent duplicate calls
-  const variationsCache = React.useRef<{
-    [key: string]: {
-      data: DatabasePackagingVariation[] | DatabaseProductVariation[]
-      timestamp: number
-      loading: Promise<void> | null
-    }
-  }>({})
-
-  const loadVariations = React.useCallback(async (item: DatabaseProduct | DatabasePackaging) => {
-    const cacheKey = `variations-${item.id}-${isPackaging(item) ? 'package' : 'product'}`
-    
-    try {
-      console.log('🔄 Loading variations using global cache for:', cacheKey)
-      
-      if (isPackaging(item)) {
-        // Use global cache for packaging variations
-        const variations = await apiCache.get(cacheKey, () => getPackagingVariations(item.id))
-        setPackageVariations(variations)
-      } else {
-        // For products, use the variations from the product object if available
-        if (item.variations) {
-          console.log('📦 Using product variations from object:', item.variations.length)
-          setProductVariations(item.variations)
-        } else {
-          console.log('⚠️ No variations found in product object')
-          setProductVariations([])
-        }
-      }
-      
-      console.log('✅ Variations loaded successfully for:', cacheKey)
-    } catch (error) {
-      console.error('❌ Error loading variations:', error)
-      toast.error('Failed to load variations')
-      
-      // Set empty arrays on error
-      if (isPackaging(item)) {
-        setPackageVariations([])
-      } else {
-        setProductVariations([])
-      }
-    }
-  }, [])
-
+  // Helper function to add selected items to purchase
   const addSelectedItemsToPurchase = () => {
-    const newItems: PurchaseItem[] = selectedItems.map(selected => ({
-      itemId: selected.id,
-      itemType: selected.type,
-      itemName: selected.name,
-      quantity: 1,
-      purchasePrice: 0,
-      total: 0,
-      variationId: selected.variationId,
-    }))
-
-    setForm(prev => ({
-      ...prev,
-      items: [...prev.items, ...newItems]
-    }))
-
+    addItemsToForm(selectedItems)
     setSelectedItems([])
     setIsModalOpen(false)
-    toast.success(`Added ${newItems.length} item${newItems.length !== 1 ? 's' : ''} to purchase`)
   }
 
-  const updateItemQuantity = (index: number, quantity: string) => {
-    const qty = parseInt(quantity) || 0
-    setForm(prev => ({
-      ...prev,
-      items: prev.items.map((item, i) => 
-        i === index 
-          ? { ...item, quantity: qty, total: qty * item.purchasePrice }
-          : item
-      )
-    }))
+  // Helper function to handle form submission
+  const handleFormSubmit = (e: React.FormEvent) => {
+    handleSubmit(e, suppliers, warehouses)
   }
 
-  const updateItemPrice = (index: number, price: string) => {
-    const purchasePrice = parseFloat(price) || 0
-    setForm(prev => ({
-      ...prev,
-      items: prev.items.map((item, i) => 
-        i === index 
-          ? { ...item, purchasePrice, total: item.quantity * purchasePrice }
-          : item
-      )
-    }))
-  }
-
-  const removeItem = (index: number) => {
-    setForm(prev => ({
-      ...prev,
-      items: prev.items.filter((_, i) => i !== index)
-    }))
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    if (!validateForm()) return
-
-    setIsLoading(true)
-    
-    try {
-      const selectedSupplier = suppliers.find(s => s.id === form.supplierId)
-      const selectedWarehouse = warehouses.find(w => w.id === form.warehouse)
-      
-      if (!selectedSupplier || !selectedWarehouse) {
-        throw new Error('Invalid supplier or warehouse selection')
-      }
-
-      const purchaseData: CreatePurchaseData = {
-        supplier_id: form.supplierId,
-        supplier_name: selectedSupplier.name,
-        warehouse_id: form.warehouse,
-        warehouse_name: selectedWarehouse.name,
-        purchase_date: form.date,
-        created_by: 'admin' // In a real app, this would come from authenticated user
-      }
-
-      const items: CreatePurchaseItemData[] = form.items.map(item => ({
-        item_id: item.itemId,
-        item_type: item.itemType,
-        item_name: item.itemName,
-        variation_id: item.variationId,
-        quantity: item.quantity,
-        purchase_price: item.purchasePrice,
-        total: item.total
-      }))
-
-      const createdPurchase = await createPurchase(purchaseData, items)
-      
-      // Log the purchase creation activity
-      const totalAmount = form.items.reduce((sum, item) => sum + item.total, 0)
-      await logPurchaseCreate(
-        createdPurchase.id,
-        selectedSupplier.name,
-        totalAmount,
-        {
-          items: form.items.length,
-          warehouse: selectedWarehouse.name,
-          date: form.date
-        }
-      ).catch(error => {
-        console.warn('Failed to log purchase creation:', error)
-      })
-      
-      toast.success('Purchase order created successfully!')
-      router.push(`/purchases/${createdPurchase.id}`)
-      
-    } catch (error) {
-      console.error('Error creating purchase:', error)
-      toast.error('Failed to create purchase order. Please try again.')
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const formatCurrency = (amount: number) => {
-    return '৳ ' + new Intl.NumberFormat('en-BD', {
-      minimumFractionDigits: 0,
-    }).format(amount)
-  }
-
+  // Helper functions for UI rendering
   const getItemTypeIcon = (itemType: 'product' | 'package') => {
     return itemType === 'package' ? (
       <Package className="h-4 w-4 text-purple-600" />
@@ -508,45 +140,6 @@ export default function CreatePurchasePage() {
     ) : (
       <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-800">Product</Badge>
     )
-  }
-
-  const isItemSelected = (item: DatabaseProduct | DatabasePackaging, type: 'product' | 'package', variationId?: string) => {
-    return selectedItems.some(selected => 
-      selected.id === item.id && 
-      selected.type === type &&
-      selected.variationId === variationId
-    )
-  }
-
-  const handleProductSelectionWithVariations = async (product: DatabaseProduct) => {
-    if (product.type === 'variation') {
-      setSelectedPackageForVariation(product)
-      await loadVariations(product)
-      setIsVariationModalOpen(true)
-    } else {
-      handleProductSelection(product)
-    }
-  }
-
-  const getSelectionSummary = () => {
-    const productCount = selectedItems.filter(item => item.type === 'product').length
-    const packageCount = selectedItems.filter(item => item.type === 'package').length
-    
-    const parts = []
-    if (productCount > 0) parts.push(`${productCount} product${productCount !== 1 ? 's' : ''}`)
-    if (packageCount > 0) parts.push(`${packageCount} package${packageCount !== 1 ? 's' : ''}`)
-    
-    return parts.join(', ')
-  }
-
-  const getItemNameById = (id: string, type: 'product' | 'package') => {
-    if (type === 'product') {
-      const product = products.find(p => p.id === id)
-      return product ? product.name : 'Unknown Product'
-    } else {
-      const packaging = packages.find(p => p.id === id)
-      return packaging ? packaging.title : 'Unknown Package'
-    }
   }
 
   if (dataLoading) {
@@ -708,7 +301,7 @@ export default function CreatePurchasePage() {
         </div>
       </div>
 
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleFormSubmit}>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Purchase Details */}
           <div className="lg:col-span-2 space-y-8">
@@ -812,17 +405,7 @@ export default function CreatePurchasePage() {
                 {form.items.length > 0 && (
                   <div className="space-y-4">
                     {form.items.map((item, index) => {
-                      // Extract base name and variation details
-                      const getItemDisplayInfo = (itemName: string) => {
-                        if (itemName.includes(' (') && itemName.includes(')')) {
-                          const lastParenIndex = itemName.lastIndexOf(' (')
-                          const baseName = itemName.substring(0, lastParenIndex)
-                          const variation = itemName.substring(lastParenIndex + 2, itemName.length - 1)
-                          return { baseName, variation }
-                        }
-                        return { baseName: itemName, variation: null }
-                      }
-
+                      // Extract base name and variation details using utility function
                       const { baseName, variation } = getItemDisplayInfo(item.itemName)
 
                       return (
@@ -987,14 +570,14 @@ export default function CreatePurchasePage() {
                   <Button 
                     type="submit" 
                     className="w-full" 
-                    disabled={isLoading || form.items.length === 0}
+                    disabled={isLoading || form.items.length === 0 || userLoading || !user}
                   >
                     {isLoading ? (
                       <div className="mr-2 h-4 w-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
                     ) : (
                       <ShoppingCart className="mr-2 h-4 w-4" />
                     )}
-                    {isLoading ? 'Creating...' : 'Create Purchase Order'}
+                    {isLoading ? 'Creating...' : userLoading ? 'Loading...' : !user ? 'Please log in' : 'Create Purchase Order'}
                   </Button>
                   
                   <Link href="/purchases">
@@ -1221,8 +804,8 @@ export default function CreatePurchasePage() {
                         </Badge>
                       </div>
                       <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <span>Price: {formatCurrency(variation.price || 0)}</span>
-                        <span>Stock: {variation.stock}</span>
+                        <span>SKU: {variation.sku}</span>
+                        <span>Type: Package Variation</span>
                       </div>
                     </div>
                   </div>
@@ -1250,7 +833,7 @@ export default function CreatePurchasePage() {
                       </div>
                       <div className="flex items-center gap-4 text-sm text-muted-foreground">
                         <span>Price: {formatCurrency(variation.price || 0)}</span>
-                        <span>Stock: {variation.stock}</span>
+                        <span>SKU: {variation.sku}</span>
                       </div>
                     </div>
                   </div>
@@ -1276,7 +859,7 @@ export default function CreatePurchasePage() {
                         {variationItems.length} variation(s) selected:
                       </div>
                       {variationItems.map((item, index) => (
-                        <div key={index} className="flex items-center gap-1 text-xs">
+                        <div key={`${item.id}-${item.variationId}-${index}`} className="flex items-center gap-1 text-xs">
                           {item.type === 'product' ? (
                             <Box className="h-3 w-3 text-blue-600" />
                           ) : (

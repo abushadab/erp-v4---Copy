@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { Plus, X, Edit, Save } from 'lucide-react'
+import { Edit, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -13,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { AttributeValuesEditor } from '@/components/products/ui/AttributeValuesEditor'
 
 interface EditAttributeForm {
   id: string
@@ -74,43 +75,17 @@ export function EditAttributeModal({
             />
           </div>
           
-          <div className="space-y-3">
-            <Label>Values</Label>
-            <div className="space-y-2 max-h-32 overflow-y-auto">
-              {form.values.map((value, index) => (
-                <div key={index} className="flex gap-2">
-                  <Input
-                    placeholder="Attribute value"
-                    value={value}
-                    onChange={(e) => onUpdateValue(index, e.target.value)}
-                    className="flex-1"
-                  />
-                  {form.values.length > 1 && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => onRemoveValue(index)}
-                      className="h-10 w-10 p-0"
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-              ))}
-            </div>
-            
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={onAddValue}
-              className="w-full"
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Add Value
-            </Button>
-          </div>
+          <AttributeValuesEditor
+            values={form.values}
+            onAddValue={onAddValue}
+            onUpdateValue={onUpdateValue}
+            onRemoveValue={onRemoveValue}
+            label="Values"
+            placeholder={(index) => "Attribute value"}
+            disabled={isEditing}
+            maxHeight="max-h-32"
+            addButtonText="Add Value"
+          />
         </div>
         
         <DialogFooter className="flex gap-3">

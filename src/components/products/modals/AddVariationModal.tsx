@@ -19,7 +19,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import type { DatabaseAttribute } from '@/lib/hooks/useProductData'
+import type { 
+  DatabaseAttribute, 
+  DatabaseAttributeValue,
+  DatabaseProductVariation 
+} from '@/lib/hooks/useProductData'
+import { safeParsePrice } from '@/lib/utils/productTransforms'
 
 interface ValidationState {
   isChecking: boolean
@@ -66,7 +71,7 @@ export function AddVariationModal({
   const handlePriceChange = (value: string) => {
     onVariationFormChange({
       ...variationForm,
-      sellingPrice: value ? parseFloat(value) : undefined
+      sellingPrice: safeParsePrice(value)
     })
   }
 
@@ -160,7 +165,7 @@ export function AddVariationModal({
                       <SelectValue placeholder={`Select ${attribute?.name}`} />
                     </SelectTrigger>
                     <SelectContent className="z-[9999]">
-                      {attribute?.values?.map((value: any) => (
+                      {attribute?.values?.map((value) => (
                         <SelectItem key={value.id} value={value.id}>
                           {value.label}
                         </SelectItem>

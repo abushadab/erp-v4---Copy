@@ -34,9 +34,15 @@ import { useProductForm } from "@/hooks/products/useProductForm"
 import { useVariationForm } from "@/hooks/products/useVariationForm"
 import { useAttributeForm } from "@/hooks/products/useAttributeForm"
 
+// Note: useAttributeForm should return all necessary handlers:
+// - setCreateAttributeForm, setEditAttributeForm for form updates
+// - addAttributeValue, updateAttributeValue, removeAttributeValue for create form
+// - addEditAttributeValue, updateEditAttributeValue, removeEditAttributeValue for edit form
+
 // Import UI components (to be created)
 import { ProductHeader } from "@/components/products/ui/ProductHeader"
 import { ProductSummary } from "@/components/products/ui/ProductSummary"
+import { AttributeValuesEditor } from "@/components/products/ui/AttributeValuesEditor"
 import { VariableProductFields } from "@/components/products/forms/VariableProductFields"
 import { VariationsTable } from "@/components/products/variations/VariationsTable"
 
@@ -90,7 +96,15 @@ export default function EditProductPage() {
     isCreatingAttribute,
     isEditingAttribute,
     handleCreateAttribute,
-    handleEditAttribute
+    handleEditAttribute,
+    setCreateAttributeForm,
+    setEditAttributeForm,
+    addAttributeValue,
+    updateAttributeValue,
+    removeAttributeValue,
+    addEditAttributeValue,
+    updateEditAttributeValue,
+    removeEditAttributeValue
   } = useAttributeForm(attributes)
 
   // Modal states
@@ -280,24 +294,24 @@ export default function EditProductPage() {
           isOpen={showCreateAttributeModal}
           onClose={() => setShowCreateAttributeModal(false)}
           form={createAttributeForm}
-          onFormChange={() => {}} // Handled by hook
+          onFormChange={setCreateAttributeForm}
           isCreating={isCreatingAttribute}
           onCreateAttribute={handleCreateAttribute}
-          onAddValue={() => {}} // Handled by hook
-          onUpdateValue={() => {}} // Handled by hook
-          onRemoveValue={() => {}} // Handled by hook
+          onAddValue={addAttributeValue}
+          onUpdateValue={updateAttributeValue}
+          onRemoveValue={removeAttributeValue}
         />
 
         <EditAttributeModal
           isOpen={showEditAttributeModal}
           onClose={() => setShowEditAttributeModal(false)}
           form={editAttributeForm}
-          onFormChange={() => {}} // Handled by hook
+          onFormChange={setEditAttributeForm}
           isEditing={isEditingAttribute}
           onUpdateAttribute={handleEditAttribute}
-          onAddValue={() => {}} // Handled by hook
-          onUpdateValue={() => {}} // Handled by hook
-          onRemoveValue={() => {}} // Handled by hook
+          onAddValue={addEditAttributeValue}
+          onUpdateValue={updateEditAttributeValue}
+          onRemoveValue={removeEditAttributeValue}
         />
       </div>
     </div>
@@ -316,7 +330,8 @@ EXTRACTED COMPONENTS:
 - 3 Form components (600 lines → reusable components)
 - 3 Data hooks (400 lines → reusable logic)
 - 4 Business logic hooks (300 lines → testable logic)
-- 3 UI components (200 lines → focused components)
+- 4 UI components (200 lines → focused components)
+  * AttributeValuesEditor - Consolidated duplicate logic from Create/Edit modals
 
 BENEFITS:
 - 78% reduction in main file size

@@ -251,10 +251,10 @@ export const getPackaging = async (): Promise<Packaging[]> => {
     variations: packaging.variations?.map((variation: any) => ({
       id: variation.id,
       sku: variation.sku,
-      attributeValues: variation.variation_attributes?.reduce((acc: any, attr: any) => {
+      attributeValues: variation.variation_attributes?.reduce((acc: Record<string, string>, attr: { attribute_id: string; attribute_value_id: string }) => {
         acc[attr.attribute_id] = attr.attribute_value_id
         return acc
-      }, {} as { [attributeId: string]: string }) || {},
+      }, {} as Record<string, string>) || {},
       price: 0, // These would come from warehouse stock data
       buyingPrice: 0,
       stock: 0,
@@ -352,10 +352,10 @@ export const getPackagingByWarehouse = async (warehouseId: string): Promise<Pack
     variations: packagingWithVariations.variations?.map((variation: any) => ({
       id: variation.id,
       sku: variation.sku,
-      attributeValues: variation.attribute_values?.reduce((acc: any, attr: any) => {
+      attributeValues: variation.attribute_values?.reduce((acc: Record<string, string>, attr: { attribute_id: string; value_id: string }) => {
         acc[attr.attribute_id] = attr.value_id
         return acc
-      }, {} as { [attributeId: string]: string }) || {},
+      }, {} as Record<string, string>) || {},
       price: 0, // These would come from pricing tables
       buyingPrice: 0,
       stock: variation.stock || 0,

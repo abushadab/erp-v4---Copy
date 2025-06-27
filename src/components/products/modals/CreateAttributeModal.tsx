@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { Plus, X } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -13,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { AttributeValuesEditor } from '@/components/products/ui/AttributeValuesEditor'
 
 interface CreateAttributeForm {
   name: string
@@ -70,43 +71,15 @@ export function CreateAttributeModal({
             />
           </div>
 
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label>Attribute Values *</Label>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={onAddValue}
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                Add Value
-              </Button>
-            </div>
-            
-            <div className="space-y-2 max-h-48 overflow-y-auto">
-              {form.values.map((value, index) => (
-                <div key={index} className="flex gap-2">
-                  <Input
-                    value={value}
-                    onChange={(e) => onUpdateValue(index, e.target.value)}
-                    placeholder={`Value ${index + 1}`}
-                    className="flex-1"
-                  />
-                  {form.values.length > 1 && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => onRemoveValue(index)}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
+          <AttributeValuesEditor
+            values={form.values}
+            onAddValue={onAddValue}
+            onUpdateValue={onUpdateValue}
+            onRemoveValue={onRemoveValue}
+            label="Attribute Values *"
+            disabled={isCreating}
+            showAddButton={false} // We'll show the add button at the bottom only
+          />
 
           <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
             <p className="text-sm text-blue-800">

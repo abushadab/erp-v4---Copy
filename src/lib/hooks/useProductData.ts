@@ -2,9 +2,65 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { checkSkuExists } from '@/lib/supabase/mutations'
 
 // Type definitions
+
+// Raw query result from Supabase for variations
+interface VariationQueryResult {
+  id: string
+  product_id: string
+  sku: string
+  price?: number
+  created_at: string
+  updated_at: string
+  product_variation_attributes: Array<{
+    attribute_id: string
+    attribute_value_id: string
+    attributes: { id: string; name: string; type: string }
+    attribute_values: { id: string; value: string; label: string }
+  }>
+}
+
+interface DatabaseProductVariation {
+  id: string
+  product_id: string
+  sku: string
+  price?: number
+  created_at: string
+  updated_at: string
+  product_variation_attributes: DatabaseProductVariationAttribute[]
+  // Computed property added during processing for easier access
+  attribute_values?: DatabaseVariationAttributeValue[]
+}
+
+interface DatabaseProductVariationAttribute {
+  attribute_id: string
+  attribute_value_id: string
+  attributes: {
+    id: string
+    name: string
+    type: string
+  }
+  attribute_values: {
+    id: string
+    value: string
+    label: string
+  }
+}
+
+interface DatabaseProductAttribute {
+  id: string
+  attribute_id: string
+  product_id: string
+  created_at: string
+  updated_at: string
+  attributes: {
+    id: string
+    name: string
+    type: string
+  }
+}
+
 interface DatabaseProduct {
   id: string
   name: string
@@ -19,9 +75,9 @@ interface DatabaseProduct {
   created_at: string
   updated_at: string
   category?: { id: string; name: string; slug: string }
-  variations?: any[]
-  attributes?: any[]
-  product_attributes?: any[]
+  variations?: DatabaseProductVariation[]
+  attributes?: DatabaseAttribute[]
+  product_attributes?: DatabaseProductAttribute[]
 }
 
 interface DatabaseCategory {
@@ -35,6 +91,21 @@ interface DatabaseCategory {
   updated_at: string
 }
 
+interface DatabaseAttributeValue {
+  id: string
+  value: string
+  label: string
+  sort_order?: number
+  created_at: string
+}
+
+interface DatabaseVariationAttributeValue {
+  attribute_id: string
+  attribute_name: string
+  value_id: string
+  value_label: string
+}
+
 interface DatabaseAttribute {
   id: string
   name: string
@@ -42,7 +113,7 @@ interface DatabaseAttribute {
   required: boolean
   created_at: string
   updated_at: string
-  values?: any[]
+  values?: DatabaseAttributeValue[]
 }
 
 // Simple module-level cache to avoid window object issues
@@ -51,17 +122,15 @@ const dataCache = {
   productId: '',
   categories: [] as DatabaseCategory[],
   attributes: [] as DatabaseAttribute[],
-  skuValidations: new Map<string, { result: boolean, timestamp: number }>(),
   lastFetch: {
     product: 0,
     categories: 0,
     attributes: 0
   },
   currentRequests: {
-    product: null as Promise<DatabaseProduct | null> | null,
+    products: new Map<string, Promise<DatabaseProduct | null>>(),
     categories: null as Promise<DatabaseCategory[]> | null,
     attributes: null as Promise<DatabaseAttribute[]> | null,
-    skuValidations: new Map<string, Promise<boolean>>()
   },
   requestCounters: {
     product: 0,
@@ -85,10 +154,11 @@ async function getProductById(id: string, forceRefresh = false): Promise<Databas
     return dataCache.product
   }
 
-  // If there's already a request in progress, wait for it regardless of product ID
-  if (dataCache.currentRequests.product) {
-    console.log('⏳ Product request already in progress, waiting for existing promise...')
-    return await dataCache.currentRequests.product
+  // If there's already a request in progress for this specific product, wait for it
+  const existingRequest = dataCache.currentRequests.products.get(id)
+  if (existingRequest) {
+    console.log(`⏳ Product request already in progress for ID ${id}, waiting for existing promise...`)
+    return await existingRequest
   }
 
   // Increment request counter for tracking
@@ -123,7 +193,7 @@ async function getProductById(id: string, forceRefresh = false): Promise<Databas
       }
 
       // Get variations if it's a variation product
-      let variations: any[] = []
+      let variations: DatabaseProductVariation[] = []
       if (product.type === 'variation') {
         const { data: variationData, error: variationsError } = await supabase
           .from('product_variations')
@@ -139,9 +209,10 @@ async function getProductById(id: string, forceRefresh = false): Promise<Databas
           .eq('product_id', id)
 
         if (!variationsError && variationData) {
-          variations = variationData.map(variation => ({
+          variations = variationData.map((variation: VariationQueryResult): DatabaseProductVariation => ({
             ...variation,
-            attribute_values: variation.product_variation_attributes.map((pva: any) => ({
+            product_variation_attributes: variation.product_variation_attributes,
+            attribute_values: variation.product_variation_attributes.map(pva => ({
               attribute_id: pva.attribute_id,
               attribute_name: pva.attributes.name,
               value_id: pva.attribute_value_id,
@@ -154,7 +225,7 @@ async function getProductById(id: string, forceRefresh = false): Promise<Databas
       const result = {
         ...product,
         variations: product.type === 'variation' ? variations : undefined,
-        attributes: product.product_attributes?.map((pa: any) => pa.attributes) || []
+        attributes: product.product_attributes?.map((pa: DatabaseProductAttribute) => pa.attributes) || []
       }
 
       // Update cache
@@ -168,12 +239,12 @@ async function getProductById(id: string, forceRefresh = false): Promise<Databas
       console.error(`❌ [${requestId}] (#${requestNumber}) Error loading product data:`, error)
       throw error
     } finally {
-      dataCache.currentRequests.product = null
+      dataCache.currentRequests.products.delete(id)
     }
   })()
 
-  // Store the request promise
-  dataCache.currentRequests.product = requestPromise
+  // Store the request promise for this specific product ID
+  dataCache.currentRequests.products.set(id, requestPromise)
   
   return await requestPromise
 }
@@ -272,7 +343,7 @@ async function getAttributes(forceRefresh = false): Promise<DatabaseAttribute[]>
 
       const result = data?.map(attr => ({
         ...attr,
-        values: attr.values?.sort((a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0))
+        values: attr.values?.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
       })) || []
 
       // Update cache
@@ -295,51 +366,6 @@ async function getAttributes(forceRefresh = false): Promise<DatabaseAttribute[]>
   return await requestPromise
 }
 
-// Deduplicated SKU validation function
-async function validateSkuUnique(sku: string, excludeId: string, forceRefresh = false): Promise<boolean> {
-  const now = Date.now()
-  const cacheKey = `${sku}:${excludeId}`
-
-  // Check cache first
-  if (!forceRefresh) {
-    const cached = dataCache.skuValidations.get(cacheKey)
-    if (cached && (now - cached.timestamp) < CACHE_DURATION) {
-      console.log('📦 Using cached SKU validation for', sku)
-      return cached.result
-    }
-  }
-
-  // If there's already a request in progress, wait for it
-  const existingRequest = dataCache.currentRequests.skuValidations.get(cacheKey)
-  if (existingRequest) {
-    console.log('⏳ SKU validation request already in progress, waiting for existing promise...')
-    return await existingRequest
-  }
-
-  // Create a new request promise
-  const requestPromise = (async (): Promise<boolean> => {
-    try {
-      console.log('🔄 Fetching fresh SKU validation from API for', sku)
-      const exists = await checkSkuExists(sku, excludeId)
-      
-      // Update cache
-      dataCache.skuValidations.set(cacheKey, { result: exists, timestamp: now })
-      
-      console.log('✅ SKU validation completed')
-      return exists
-    } catch (error) {
-      console.error('❌ Error validating SKU:', error)
-      throw error
-    } finally {
-      dataCache.currentRequests.skuValidations.delete(cacheKey)
-    }
-  })()
-
-  // Store the request promise
-  dataCache.currentRequests.skuValidations.set(cacheKey, requestPromise)
-  
-  return await requestPromise
-}
 
 // Custom hook for product data management
 export function useProductData(productId?: string) {
@@ -402,21 +428,13 @@ export function useProductData(productId?: string) {
     }
   }, [])
 
-  const validateSku = useCallback(async (sku: string, excludeId: string = '') => {
-    try {
-      return await validateSkuUnique(sku, excludeId)
-    } catch (error) {
-      console.error('Error validating SKU:', error)
-      return false
-    }
-  }, [])
 
   const clearCache = useCallback(() => {
     dataCache.product = null
     dataCache.productId = ''
     dataCache.categories = []
     dataCache.attributes = []
-    dataCache.skuValidations.clear()
+    dataCache.currentRequests.products.clear()
     dataCache.lastFetch = { product: 0, categories: 0, attributes: 0 }
   }, [])
 
@@ -438,10 +456,19 @@ export function useProductData(productId?: string) {
     loadProduct,
     loadCategories,
     loadAttributes,
-    validateSku,
     clearCache
   }
 }
 
 // Export types for external use
-export type { DatabaseProduct, DatabaseCategory, DatabaseAttribute }
+export type { 
+  DatabaseProduct,
+  DatabaseProductVariation,
+  DatabaseProductVariationAttribute,
+  DatabaseProductAttribute,
+  DatabaseCategory, 
+  DatabaseAttribute, 
+  DatabaseAttributeValue,
+  DatabaseVariationAttributeValue,
+  VariationQueryResult
+}

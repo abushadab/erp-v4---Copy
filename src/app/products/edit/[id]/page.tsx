@@ -456,10 +456,10 @@ function transformDatabaseProductToProduct(dbProduct: DatabaseProduct): Product 
       buyingPrice: 0,
       stock: 0,
       boughtQuantity: 0,
-      attributeValues: dbVariation.attribute_values?.reduce((acc: any, attr: any) => {
+      attributeValues: dbVariation.attribute_values?.reduce((acc: Record<string, string>, attr: { attribute_id: string; value_id: string }) => {
         acc[attr.attribute_id] = attr.value_id
         return acc
-      }, {} as { [attributeId: string]: string }) || {}
+      }, {} as Record<string, string>) || {}
     })) || []
 
     return {

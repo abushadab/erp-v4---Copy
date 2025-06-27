@@ -48,6 +48,17 @@ import {
   PAYMENT_METHODS
 } from './purchases-types'
 
+// Re-export types for external use
+export type {
+  DatabaseSupplier,
+  DatabaseWarehouse,
+  CreatePurchaseData,
+  CreatePurchaseItemData,
+  DatabasePurchase,
+  DatabasePurchaseItem,
+  PurchaseWithItems
+} from './purchases-types'
+
 // Request deduplication system moved to purchases-utils.ts
 
 // All types are now imported from purchases-types.ts

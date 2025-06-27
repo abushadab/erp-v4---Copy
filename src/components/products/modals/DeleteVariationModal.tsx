@@ -12,7 +12,12 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import type { ProductVariation } from '@/lib/types'
-import type { DatabaseAttribute } from '@/lib/hooks/useProductData'
+import type { 
+  DatabaseAttribute, 
+  DatabaseAttributeValue,
+  DatabaseProductVariation 
+} from '@/lib/hooks/useProductData'
+import { getAttributeName, getAttributeValueName } from '@/lib/utils/productTransforms'
 
 interface DeleteVariationModalProps {
   isOpen: boolean
@@ -29,16 +34,6 @@ export function DeleteVariationModal({
   attributes,
   onConfirmDelete
 }: DeleteVariationModalProps) {
-  const getAttributeName = (attributeId: string): string => {
-    const attribute = attributes.find(attr => attr.id === attributeId)
-    return attribute?.name || 'Unknown'
-  }
-
-  const getAttributeValueName = (attributeId: string, valueId: string): string => {
-    const attribute = attributes.find(attr => attr.id === attributeId)
-    const value = attribute?.values?.find((val: any) => val.id === valueId)
-    return value?.label || value?.value || 'Unknown'
-  }
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -57,11 +52,18 @@ export function DeleteVariationModal({
                 SKU: {variation.sku}
               </p>
               <div className="flex flex-wrap gap-1 mt-2">
-                {Object.entries(variation.attributeValues || {}).map(([attrId, valueId]) => (
-                  <Badge key={attrId} variant="secondary" className="text-xs">
-                    {getAttributeName(attrId)}: {getAttributeValueName(attrId, valueId as string)}
-                  </Badge>
-                ))}
+                {Object.entries(variation.attributeValues || {}).map(([attrId, valueId]) => {
+                  // valueId is guaranteed to be string by the attributeValues interface
+                  if (typeof valueId !== 'string') {
+                    console.warn(`Invalid valueId type for attribute ${attrId}:`, typeof valueId, valueId)
+                    return null
+                  }
+                  return (
+                    <Badge key={attrId} variant="secondary" className="text-xs">
+                      {getAttributeName(attributes, attrId)}: {getAttributeValueName(attributes, attrId, valueId)}
+                    </Badge>
+                  )
+                })}
               </div>
             </div>
           </div>

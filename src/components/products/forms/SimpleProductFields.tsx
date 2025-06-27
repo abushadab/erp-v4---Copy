@@ -4,11 +4,13 @@ import React from 'react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { safeParsePrice } from '@/lib/utils/productTransforms'
 
 interface ValidationState {
   isChecking: boolean
   isValid: boolean | null
   message: string
+  isError?: boolean
 }
 
 interface ProductForm {
@@ -37,7 +39,7 @@ export function SimpleProductFields({
   const handlePriceChange = (value: string) => {
     onFormChange({
       ...form,
-      sellingPrice: value ? parseFloat(value) : undefined
+      sellingPrice: safeParsePrice(value)
     })
   }
 
@@ -60,11 +62,13 @@ export function SimpleProductFields({
                 onChange={(e) => handleSkuChange(e.target.value)}
                 placeholder="Enter SKU"
                 className={
-                  skuValidation.isValid === false 
-                    ? "border-red-500 focus-visible:ring-red-500" 
-                    : skuValidation.isValid === true 
-                      ? "border-green-500 focus-visible:ring-green-500" 
-                      : ""
+                  skuValidation.isError
+                    ? "border-orange-500 focus-visible:ring-orange-500"  // Network/server error
+                    : skuValidation.isValid === false 
+                      ? "border-red-500 focus-visible:ring-red-500"     // SKU invalid/exists
+                      : skuValidation.isValid === true 
+                        ? "border-green-500 focus-visible:ring-green-500" // SKU valid
+                        : ""                                              // Default/unchecked
                 }
               />
               {skuValidation.isChecking && (
@@ -75,11 +79,13 @@ export function SimpleProductFields({
             </div>
             {skuValidation.message && (
               <p className={`text-xs ${
-                skuValidation.isValid === false 
-                  ? "text-red-600" 
-                  : skuValidation.isValid === true 
-                    ? "text-green-600" 
-                    : "text-gray-600"
+                skuValidation.isError
+                  ? "text-orange-600"   // Network/server error - different color
+                  : skuValidation.isValid === false 
+                    ? "text-red-600"    // SKU invalid/exists
+                    : skuValidation.isValid === true 
+                      ? "text-green-600" // SKU valid
+                      : "text-gray-600"  // Default
               }`}>
                 {skuValidation.message}
               </p>
