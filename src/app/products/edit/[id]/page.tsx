@@ -440,12 +440,8 @@ export default function EditProductPage() {
                     type: productForm.form.type,
                     status: productForm.form.status,
                     sku: productForm.form.sku,
-                    selling_price: productForm.form.sellingPrice,
-                    buying_price: productForm.form.buyingPrice,
-                    stock: productForm.form.stock,
-                    bought_quantity: productForm.form.boughtQuantity,
-                    parent_sku: productForm.form.parentSku,
-                    attributes: productForm.form.selectedAttributes,
+                    price: productForm.form.sellingPrice,
+                    parent_sku: productForm.form.parentSku
                     variations: productForm.form.variations.map(v => ({
                       id: v.id,
                       sku: v.sku,
@@ -460,7 +456,7 @@ export default function EditProductPage() {
                   productForm.showSuccessMessage()
                   
                   // Reload product data
-                  await loadProduct()
+                  await loadProduct(productId)
                   
                   // Clear deleted variation IDs
                   setDeletedVariationIds([])

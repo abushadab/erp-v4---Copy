@@ -154,17 +154,10 @@ export function useProductValidation(productId: string) {
           description: newErrors[0]
         })
       } else {
+        // Format multiple errors with bullet points for better readability
+        const formattedErrors = newErrors.map(error => `• ${error}`).join('\n')
         toast.error("Validation Errors", {
-          description: (
-            <div>
-              <p className="mb-2">Please fix the following issues:</p>
-              <ul className="list-disc list-inside space-y-1">
-                {newErrors.map((error, index) => (
-                  <li key={index}>{error}</li>
-                ))}
-              </ul>
-            </div>
-          )
+          description: `Please fix the following issues:\n${formattedErrors}`
         })
       }
     }
