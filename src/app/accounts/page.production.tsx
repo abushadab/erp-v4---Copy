@@ -4,25 +4,6 @@ import * as React from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Skeleton } from "@/components/ui/skeleton"
-import { Label } from "@/components/ui/label"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import {
   Tabs,
   TabsContent,
@@ -30,33 +11,14 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs"
 
-import { toast } from "sonner"
 import { 
-  Plus, 
   Search, 
   DollarSign,
   TrendingUp,
   TrendingDown,
   Building,
   CreditCard,
-  Banknote,
-  Loader2,
-  RefreshCw,
-  Edit3,
-  Smartphone,
-  Wallet
 } from "lucide-react"
-import { Switch } from "@/components/ui/switch"
-import { 
-  getAccountsWithCategories,
-  getAccountCategories,
-  getFinancialSummary,
-  createAccount,
-  updateAccount,
-  type CreateAccountData
-} from "@/lib/supabase/accounts-client"
-import { logAccountCreate, logAccountUpdate } from "@/lib/supabase/activity-logger"
-import type { AccountWithCategory, AccountCategory } from "@/lib/supabase/types"
 
 // Import our custom hooks
 import { useAccountsData, useAccountForm, useAccountFiltering } from "@/hooks/accounts"
@@ -66,88 +28,13 @@ import { AccountsHeader } from "@/components/accounts/AccountsHeader"
 import { FinancialSummaryCards } from "@/components/accounts/FinancialSummaryCards"
 import { AccountCard } from "@/components/accounts/AccountCard"
 import { AccountsLoadingSkeleton } from "@/components/accounts/AccountsLoadingSkeleton"
-import { AccountModal } from "@/components/accounts/modals"
+import { AddAccountModal, EditAccountModal } from "@/components/accounts/modals"
 
 // Import shared constants and types
 import { PAYMENT_METHOD_TYPE_OPTIONS } from "@/lib/constants/payment-methods"
+import type { AccountWithCategory } from "@/lib/supabase/types/accounting"
 
-interface FinancialSummary {
-  totalAssets: number
-  totalLiabilities: number
-  totalEquity: number
-  totalRevenue: number
-  totalExpenses: number
-  netIncome: number
-}
-
-// Global data cache and request deduplication to prevent multiple API calls
-const dataCache = {
-  accounts: null as AccountWithCategory[] | null,
-  categories: null as AccountCategory[] | null,
-  financialSummary: null as FinancialSummary | null,
-  lastFetch: 0,
-  isLoading: false,
-  currentRequest: null as Promise<void> | null
-}
-
-// Function to clear cache (can be called from other pages)
-const clearAccountsCache = () => {
-  dataCache.accounts = null
-  dataCache.categories = null
-  dataCache.financialSummary = null
-  dataCache.lastFetch = 0
-  dataCache.currentRequest = null
-  console.log('🗑️ Accounts cache cleared')
-}
-
-const CACHE_DURATION = 30000 // 30 seconds
-
-// Global debugging utility for accounts cache
-if (typeof window !== 'undefined') {
-  (window as any).clearAccountsCache = () => {
-    dataCache.accounts = null
-    dataCache.categories = null
-    dataCache.financialSummary = null
-    dataCache.lastFetch = 0
-    dataCache.isLoading = false
-    dataCache.currentRequest = null
-    console.log('🧹 Accounts cache cleared')
-  }
-  
-  (window as any).debugAccountsCache = () => {
-    console.log('🔍 Accounts Cache Debug:', {
-      hasAccounts: !!dataCache.accounts,
-      accountsCount: dataCache.accounts?.length || 0,
-      hasCategories: !!dataCache.categories,
-      categoriesCount: dataCache.categories?.length || 0,
-      hasFinancialSummary: !!dataCache.financialSummary,
-      lastFetch: new Date(dataCache.lastFetch).toISOString(),
-      isLoading: dataCache.isLoading,
-      hasCurrentRequest: !!dataCache.currentRequest,
-      cacheAge: Date.now() - dataCache.lastFetch
-    })
-  }
-  
-  // Add session debugging
-  (window as any).debugAccountsSession = async () => {
-    try {
-      const { createClient } = await import('@/lib/supabase/client')
-      const supabase = createClient()
-      const { data: { session }, error } = await supabase.auth.getSession()
-      console.log('🔍 Accounts Session Debug:', {
-        hasSession: !!session,
-        userId: session?.user?.id || 'None',
-        userEmail: session?.user?.email || 'None',
-        sessionExpiry: session?.expires_at ? new Date(session.expires_at * 1000).toISOString() : 'None',
-        error: error?.message || 'None'
-      })
-    } catch (err) {
-      console.error('❌ Session debug error:', err)
-    }
-  }
-}
-
-export default function AccountsPage() {
+export default function AccountsPageProduction() {
   // Use our custom hooks for clean separation of concerns
   const { 
     accounts, 
@@ -188,7 +75,7 @@ export default function AccountsPage() {
     handleUpdateAccount,
     resetForms,
     isSelectedCategoryAsset
-  } = useAccountForm(categories, loadData, loadData)
+  } = useAccountForm(categories, loadData)
 
   const {
     activeTab,
@@ -323,8 +210,7 @@ export default function AccountsPage() {
       </Card>
 
       {/* Add Account Modal */}
-      <AccountModal
-        mode="add"
+      <AddAccountModal
         isOpen={isAddAccountDialogOpen}
         onOpenChange={setIsAddAccountDialogOpen}
         categories={categories}
@@ -337,8 +223,7 @@ export default function AccountsPage() {
       />
 
       {/* Edit Account Modal */}
-      <AccountModal
-        mode="edit"
+      <EditAccountModal
         isOpen={isEditAccountDialogOpen}
         onOpenChange={setIsEditAccountDialogOpen}
         categories={categories}
@@ -351,11 +236,4 @@ export default function AccountsPage() {
       />
     </div>
   )
-} 
-
-// Clear cache to ensure fresh data shows the new Bangladeshi MFS accounts
-if (typeof window !== 'undefined') {
-  setTimeout(() => {
-    (window as any).clearAccountsCache?.();
-  }, 100);
 } 

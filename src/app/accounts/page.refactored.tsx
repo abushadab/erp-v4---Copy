@@ -5,7 +5,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Skeleton } from "@/components/ui/skeleton"
 import { Label } from "@/components/ui/label"
 import {
   Dialog,
@@ -47,16 +46,6 @@ import {
   Wallet
 } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
-import { 
-  getAccountsWithCategories,
-  getAccountCategories,
-  getFinancialSummary,
-  createAccount,
-  updateAccount,
-  type CreateAccountData
-} from "@/lib/supabase/accounts-client"
-import { logAccountCreate, logAccountUpdate } from "@/lib/supabase/activity-logger"
-import type { AccountWithCategory, AccountCategory } from "@/lib/supabase/types"
 
 // Import our custom hooks
 import { useAccountsData, useAccountForm, useAccountFiltering } from "@/hooks/accounts"
@@ -66,88 +55,16 @@ import { AccountsHeader } from "@/components/accounts/AccountsHeader"
 import { FinancialSummaryCards } from "@/components/accounts/FinancialSummaryCards"
 import { AccountCard } from "@/components/accounts/AccountCard"
 import { AccountsLoadingSkeleton } from "@/components/accounts/AccountsLoadingSkeleton"
-import { AccountModal } from "@/components/accounts/modals"
 
-// Import shared constants and types
+// Import types
+import type { AccountWithCategory, AccountCategory } from "@/lib/supabase/types/accounting"
+import type { CreateAccountData } from "@/lib/supabase/accounts-client"
+
+// Payment method type options (perfect for Bangladesh)
+// (other imports…)
 import { PAYMENT_METHOD_TYPE_OPTIONS } from "@/lib/constants/payment-methods"
-
-interface FinancialSummary {
-  totalAssets: number
-  totalLiabilities: number
-  totalEquity: number
-  totalRevenue: number
-  totalExpenses: number
-  netIncome: number
-}
-
-// Global data cache and request deduplication to prevent multiple API calls
-const dataCache = {
-  accounts: null as AccountWithCategory[] | null,
-  categories: null as AccountCategory[] | null,
-  financialSummary: null as FinancialSummary | null,
-  lastFetch: 0,
-  isLoading: false,
-  currentRequest: null as Promise<void> | null
-}
-
-// Function to clear cache (can be called from other pages)
-const clearAccountsCache = () => {
-  dataCache.accounts = null
-  dataCache.categories = null
-  dataCache.financialSummary = null
-  dataCache.lastFetch = 0
-  dataCache.currentRequest = null
-  console.log('🗑️ Accounts cache cleared')
-}
-
-const CACHE_DURATION = 30000 // 30 seconds
-
-// Global debugging utility for accounts cache
-if (typeof window !== 'undefined') {
-  (window as any).clearAccountsCache = () => {
-    dataCache.accounts = null
-    dataCache.categories = null
-    dataCache.financialSummary = null
-    dataCache.lastFetch = 0
-    dataCache.isLoading = false
-    dataCache.currentRequest = null
-    console.log('🧹 Accounts cache cleared')
-  }
-  
-  (window as any).debugAccountsCache = () => {
-    console.log('🔍 Accounts Cache Debug:', {
-      hasAccounts: !!dataCache.accounts,
-      accountsCount: dataCache.accounts?.length || 0,
-      hasCategories: !!dataCache.categories,
-      categoriesCount: dataCache.categories?.length || 0,
-      hasFinancialSummary: !!dataCache.financialSummary,
-      lastFetch: new Date(dataCache.lastFetch).toISOString(),
-      isLoading: dataCache.isLoading,
-      hasCurrentRequest: !!dataCache.currentRequest,
-      cacheAge: Date.now() - dataCache.lastFetch
-    })
-  }
-  
-  // Add session debugging
-  (window as any).debugAccountsSession = async () => {
-    try {
-      const { createClient } = await import('@/lib/supabase/client')
-      const supabase = createClient()
-      const { data: { session }, error } = await supabase.auth.getSession()
-      console.log('🔍 Accounts Session Debug:', {
-        hasSession: !!session,
-        userId: session?.user?.id || 'None',
-        userEmail: session?.user?.email || 'None',
-        sessionExpiry: session?.expires_at ? new Date(session.expires_at * 1000).toISOString() : 'None',
-        error: error?.message || 'None'
-      })
-    } catch (err) {
-      console.error('❌ Session debug error:', err)
-    }
-  }
-}
-
-export default function AccountsPage() {
+// (the rest of your code…)
+export default function AccountsPageRefactored() {
   // Use our custom hooks for clean separation of concerns
   const { 
     accounts, 
@@ -196,38 +113,11 @@ export default function AccountsPage() {
     searchTerms,
     updateSearchTerm,
     getFilteredAccounts,
+    getAccountTypeIcon,
+    getAccountTypeColor,
     getDisplayBalance,
+    getBalanceColor
   } = useAccountFiltering()
-
-  // Group props for Add modal
-  const addModalFormState = {
-    account: newAccount,
-    useAsPaymentMethod,
-    paymentMethodType,
-    bankAccountNumber
-  }
-
-  const addModalHandlers = {
-    setAccount: setNewAccount,
-    setUseAsPaymentMethod,
-    setPaymentMethodType,
-    setBankAccountNumber
-  }
-
-  // Group props for Edit modal
-  const editModalFormState = {
-    account: editAccount,
-    useAsPaymentMethod: editUseAsPaymentMethod,
-    paymentMethodType: editPaymentMethodType,
-    bankAccountNumber: editBankAccountNumber
-  }
-
-  const editModalHandlers = {
-    setAccount: setEditAccount,
-    setUseAsPaymentMethod: setEditUseAsPaymentMethod,
-    setPaymentMethodType: setEditPaymentMethodType,
-    setBankAccountNumber: setEditBankAccountNumber
-  }
 
   // Show loading skeleton while data is being fetched
   if (loading) {
@@ -322,40 +212,94 @@ export default function AccountsPage() {
         </Tabs>
       </Card>
 
-      {/* Add Account Modal */}
-      <AccountModal
-        mode="add"
-        isOpen={isAddAccountDialogOpen}
-        onOpenChange={setIsAddAccountDialogOpen}
-        categories={categories}
-        formState={addModalFormState}
-        handlers={addModalHandlers}
-        isSubmitting={isSubmitting}
-        onSubmit={handleAddAccount}
-        onReset={resetForms}
-        isSelectedCategoryAsset={isSelectedCategoryAsset}
-      />
+      {/* Add Account Dialog - Simplified inline version for now */}
+      <Dialog open={isAddAccountDialogOpen} onOpenChange={(open) => {
+        setIsAddAccountDialogOpen(open)
+        if (!open) resetForms()
+      }}>
+        <DialogContent className="sm:max-w-[600px] mx-4 sm:mx-0">
+          <DialogHeader>
+            <DialogTitle>Add New Account</DialogTitle>
+            <DialogDescription>
+              Create a new account in your chart of accounts.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="category" className="font-medium">
+                Category *
+              </Label>
+              <Select
+                value={newAccount.category_id || ''}
+                onValueChange={(value) => {
+                  setNewAccount((prev: Partial<CreateAccountData>) => ({ ...prev, category_id: value }))
+                  // Reset toggle if category is not asset
+                  if (!isSelectedCategoryAsset(value)) {
+                    setUseAsPaymentMethod(false)
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((category: AccountCategory) => (
+                    <SelectItem key={category.id} value={category.id}>
+                      <div className="flex items-center space-x-2">
+                        <span>{category.name} ({category.type})</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsAddAccountDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleAddAccount} disabled={isSubmitting}>
+              {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Create Account
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
-      {/* Edit Account Modal */}
-      <AccountModal
-        mode="edit"
-        isOpen={isEditAccountDialogOpen}
-        onOpenChange={setIsEditAccountDialogOpen}
-        categories={categories}
-        formState={editModalFormState}
-        handlers={editModalHandlers}
-        isSubmitting={isEditSubmitting}
-        onSubmit={handleUpdateAccount}
-        onReset={resetForms}
-        isSelectedCategoryAsset={isSelectedCategoryAsset}
-      />
+      {/* Edit Account Dialog */}
+      <Dialog open={isEditAccountDialogOpen} onOpenChange={(open) => {
+        setIsEditAccountDialogOpen(open)
+        if (!open) resetForms()
+      }}>
+        <DialogContent className="sm:max-w-[600px] mx-4 sm:mx-0">
+          <DialogHeader>
+            <DialogTitle>Edit Account</DialogTitle>
+            <DialogDescription>
+              Update the account information below.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="edit-account-name">Account Name *</Label>
+              <Input
+                id="edit-account-name"
+                value={editAccount.account_name || ''}
+                onChange={(e) => setEditAccount((prev: Partial<CreateAccountData>) => ({ ...prev, account_name: e.target.value }))}
+                placeholder="e.g., Cash in Hand"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditAccountDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleUpdateAccount} disabled={isEditSubmitting}>
+              {isEditSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Update Account
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
-} 
-
-// Clear cache to ensure fresh data shows the new Bangladeshi MFS accounts
-if (typeof window !== 'undefined') {
-  setTimeout(() => {
-    (window as any).clearAccountsCache?.();
-  }, 100);
 } 

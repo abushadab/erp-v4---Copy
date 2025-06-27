@@ -124,6 +124,7 @@ export interface CreateAccountData {
   opening_balance?: number
   is_payment_method?: boolean
   payment_method_type?: string
+  bank_account_number?: string
 }
 
 export interface CreateJournalEntryData {

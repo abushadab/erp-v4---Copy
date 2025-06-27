@@ -4,25 +4,6 @@ import * as React from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Skeleton } from "@/components/ui/skeleton"
-import { Label } from "@/components/ui/label"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import {
   Tabs,
   TabsContent,
@@ -30,33 +11,14 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs"
 
-import { toast } from "sonner"
 import { 
-  Plus, 
   Search, 
   DollarSign,
   TrendingUp,
   TrendingDown,
   Building,
   CreditCard,
-  Banknote,
-  Loader2,
-  RefreshCw,
-  Edit3,
-  Smartphone,
-  Wallet
 } from "lucide-react"
-import { Switch } from "@/components/ui/switch"
-import { 
-  getAccountsWithCategories,
-  getAccountCategories,
-  getFinancialSummary,
-  createAccount,
-  updateAccount,
-  type CreateAccountData
-} from "@/lib/supabase/accounts-client"
-import { logAccountCreate, logAccountUpdate } from "@/lib/supabase/activity-logger"
-import type { AccountWithCategory, AccountCategory } from "@/lib/supabase/types"
 
 // Import our custom hooks
 import { useAccountsData, useAccountForm, useAccountFiltering } from "@/hooks/accounts"
@@ -66,88 +28,13 @@ import { AccountsHeader } from "@/components/accounts/AccountsHeader"
 import { FinancialSummaryCards } from "@/components/accounts/FinancialSummaryCards"
 import { AccountCard } from "@/components/accounts/AccountCard"
 import { AccountsLoadingSkeleton } from "@/components/accounts/AccountsLoadingSkeleton"
-import { AccountModal } from "@/components/accounts/modals"
+import { AddAccountModal, EditAccountModal } from "@/components/accounts/modals"
 
-// Import shared constants and types
+// Import shared constants
 import { PAYMENT_METHOD_TYPE_OPTIONS } from "@/lib/constants/payment-methods"
+import type { AccountWithCategory } from "@/lib/supabase/types/accounting"
 
-interface FinancialSummary {
-  totalAssets: number
-  totalLiabilities: number
-  totalEquity: number
-  totalRevenue: number
-  totalExpenses: number
-  netIncome: number
-}
-
-// Global data cache and request deduplication to prevent multiple API calls
-const dataCache = {
-  accounts: null as AccountWithCategory[] | null,
-  categories: null as AccountCategory[] | null,
-  financialSummary: null as FinancialSummary | null,
-  lastFetch: 0,
-  isLoading: false,
-  currentRequest: null as Promise<void> | null
-}
-
-// Function to clear cache (can be called from other pages)
-const clearAccountsCache = () => {
-  dataCache.accounts = null
-  dataCache.categories = null
-  dataCache.financialSummary = null
-  dataCache.lastFetch = 0
-  dataCache.currentRequest = null
-  console.log('🗑️ Accounts cache cleared')
-}
-
-const CACHE_DURATION = 30000 // 30 seconds
-
-// Global debugging utility for accounts cache
-if (typeof window !== 'undefined') {
-  (window as any).clearAccountsCache = () => {
-    dataCache.accounts = null
-    dataCache.categories = null
-    dataCache.financialSummary = null
-    dataCache.lastFetch = 0
-    dataCache.isLoading = false
-    dataCache.currentRequest = null
-    console.log('🧹 Accounts cache cleared')
-  }
-  
-  (window as any).debugAccountsCache = () => {
-    console.log('🔍 Accounts Cache Debug:', {
-      hasAccounts: !!dataCache.accounts,
-      accountsCount: dataCache.accounts?.length || 0,
-      hasCategories: !!dataCache.categories,
-      categoriesCount: dataCache.categories?.length || 0,
-      hasFinancialSummary: !!dataCache.financialSummary,
-      lastFetch: new Date(dataCache.lastFetch).toISOString(),
-      isLoading: dataCache.isLoading,
-      hasCurrentRequest: !!dataCache.currentRequest,
-      cacheAge: Date.now() - dataCache.lastFetch
-    })
-  }
-  
-  // Add session debugging
-  (window as any).debugAccountsSession = async () => {
-    try {
-      const { createClient } = await import('@/lib/supabase/client')
-      const supabase = createClient()
-      const { data: { session }, error } = await supabase.auth.getSession()
-      console.log('🔍 Accounts Session Debug:', {
-        hasSession: !!session,
-        userId: session?.user?.id || 'None',
-        userEmail: session?.user?.email || 'None',
-        sessionExpiry: session?.expires_at ? new Date(session.expires_at * 1000).toISOString() : 'None',
-        error: error?.message || 'None'
-      })
-    } catch (err) {
-      console.error('❌ Session debug error:', err)
-    }
-  }
-}
-
-export default function AccountsPage() {
+export default function AccountsPageFinal() {
   // Use our custom hooks for clean separation of concerns
   const { 
     accounts, 
@@ -198,36 +85,6 @@ export default function AccountsPage() {
     getFilteredAccounts,
     getDisplayBalance,
   } = useAccountFiltering()
-
-  // Group props for Add modal
-  const addModalFormState = {
-    account: newAccount,
-    useAsPaymentMethod,
-    paymentMethodType,
-    bankAccountNumber
-  }
-
-  const addModalHandlers = {
-    setAccount: setNewAccount,
-    setUseAsPaymentMethod,
-    setPaymentMethodType,
-    setBankAccountNumber
-  }
-
-  // Group props for Edit modal
-  const editModalFormState = {
-    account: editAccount,
-    useAsPaymentMethod: editUseAsPaymentMethod,
-    paymentMethodType: editPaymentMethodType,
-    bankAccountNumber: editBankAccountNumber
-  }
-
-  const editModalHandlers = {
-    setAccount: setEditAccount,
-    setUseAsPaymentMethod: setEditUseAsPaymentMethod,
-    setPaymentMethodType: setEditPaymentMethodType,
-    setBankAccountNumber: setEditBankAccountNumber
-  }
 
   // Show loading skeleton while data is being fetched
   if (loading) {
@@ -300,7 +157,7 @@ export default function AccountsPage() {
                     />
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 sm:gap-6">
-                    {filteredAccounts.map((account: AccountWithCategory) => (
+                                                              {filteredAccounts.map((account: AccountWithCategory) => (
                       <AccountCard
                         key={account.id}
                         account={account}
@@ -323,13 +180,18 @@ export default function AccountsPage() {
       </Card>
 
       {/* Add Account Modal */}
-      <AccountModal
-        mode="add"
+      <AddAccountModal
         isOpen={isAddAccountDialogOpen}
         onOpenChange={setIsAddAccountDialogOpen}
         categories={categories}
-        formState={addModalFormState}
-        handlers={addModalHandlers}
+        newAccount={newAccount}
+        setNewAccount={setNewAccount}
+        useAsPaymentMethod={useAsPaymentMethod}
+        setUseAsPaymentMethod={setUseAsPaymentMethod}
+        paymentMethodType={paymentMethodType}
+        setPaymentMethodType={setPaymentMethodType}
+        bankAccountNumber={bankAccountNumber}
+        setBankAccountNumber={setBankAccountNumber}
         isSubmitting={isSubmitting}
         onSubmit={handleAddAccount}
         onReset={resetForms}
@@ -337,25 +199,23 @@ export default function AccountsPage() {
       />
 
       {/* Edit Account Modal */}
-      <AccountModal
-        mode="edit"
+      <EditAccountModal
         isOpen={isEditAccountDialogOpen}
         onOpenChange={setIsEditAccountDialogOpen}
         categories={categories}
-        formState={editModalFormState}
-        handlers={editModalHandlers}
-        isSubmitting={isEditSubmitting}
+        editAccount={editAccount}
+        setEditAccount={setEditAccount}
+        editUseAsPaymentMethod={editUseAsPaymentMethod}
+        setEditUseAsPaymentMethod={setEditUseAsPaymentMethod}
+        editPaymentMethodType={editPaymentMethodType}
+        setEditPaymentMethodType={setEditPaymentMethodType}
+        editBankAccountNumber={editBankAccountNumber}
+        setEditBankAccountNumber={setEditBankAccountNumber}
+        isEditSubmitting={isEditSubmitting}
         onSubmit={handleUpdateAccount}
         onReset={resetForms}
         isSelectedCategoryAsset={isSelectedCategoryAsset}
       />
     </div>
   )
-} 
-
-// Clear cache to ensure fresh data shows the new Bangladeshi MFS accounts
-if (typeof window !== 'undefined') {
-  setTimeout(() => {
-    (window as any).clearAccountsCache?.();
-  }, 100);
 } 
