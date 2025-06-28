@@ -69,7 +69,7 @@ export function useAddProductValidation() {
       if (isVariation) {
         duplicateInVariations = variations.some((v, index) => 
           index !== currentEditingIndex &&
-          v.sku.toLowerCase() === sku.toLowerCase()
+          v.sku && v.sku.toLowerCase() === sku.toLowerCase()
         )
       }
 
@@ -186,7 +186,7 @@ export function useDebounceSkuValidation(
   delay = 500
 ) {
   useEffect(() => {
-    if (type === 'simple' && sku) {
+    if (type === 'simple' && sku && sku.trim()) {
       const timer = setTimeout(() => {
         validateSku(sku, false)
       }, delay)
@@ -204,7 +204,7 @@ export function useDebounceVariationSkuValidation(
   delay = 500
 ) {
   useEffect(() => {
-    if (sku) {
+    if (sku && sku.trim()) {
       const timer = setTimeout(() => {
         validateSku(sku, true, variations, editingIndex)
       }, delay)

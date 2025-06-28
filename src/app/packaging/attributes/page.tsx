@@ -56,98 +56,24 @@ export default function PackagingAttributesPage() {
     values: ['']
   })
 
-  // Deduplication cache and initial load tracker
-  const initialLoadTriggered = React.useRef(false)
-  const CACHE_DURATION = 30000 // 30 seconds
-  
-  const dataCache = React.useRef<{
-    attributes: DatabasePackagingAttribute[]
-    lastFetch: number
-    currentRequest: Promise<void> | null
-  }>({
-    attributes: [],
-    lastFetch: 0,
-    currentRequest: null
-  })
+  // Load data on mount
+  React.useEffect(() => {
+    loadAttributes()
+  }, [])
 
-  // Load packaging attributes from Supabase with deduplication
-  const loadPackagingAttributes = async (forceRefresh = false) => {
-    const now = Date.now()
-    
-    console.log('🔍 loadPackagingAttributes called with forceRefresh:', forceRefresh)
-    
-    // Check cache first - only use cache if data exists and is fresh
-    if (!forceRefresh && 
-        dataCache.current.attributes.length > 0 && 
-        (now - dataCache.current.lastFetch) < CACHE_DURATION) {
-      console.log('📦 Using cached attributes data')
-      setAttributes(dataCache.current.attributes)
-      setLoading(false)
-      return
-    }
-
-    // If there's already a request in progress, wait for it
-    if (dataCache.current.currentRequest) {
-      console.log('⏳ Request already in progress, waiting for existing promise...')
-      try {
-        await dataCache.current.currentRequest
-        // After the request completes, update state with cached data
-        if (dataCache.current.attributes.length > 0) {
-          console.log('📦 Using data from completed request')
-          setAttributes(dataCache.current.attributes)
-          setLoading(false)
-        }
-      } catch (error) {
-        console.error('⚠️ Error in concurrent request:', error)
-      }
-      return
-    }
-
-    // Create a new request promise
-    const requestPromise = (async () => {
+  const loadAttributes = async () => {
     try {
-        console.log('🔄 Fetching fresh attributes data from API')
       setLoading(true)
-        
       const data = await getPackagingAttributes()
-        
-        console.log('✅ Attributes data fetched successfully')
-        
-        // Update cache
-        dataCache.current.attributes = data
-        dataCache.current.lastFetch = now
-        
-        // Update state
       setAttributes(data)
     } catch (error) {
-        console.error('❌ Error loading packaging attributes:', error)
+      console.error('❌ Error loading packaging attributes:', error)
       toast.error('Failed to load packaging attributes')
-        setAttributes([])
+      setAttributes([])
     } finally {
-        console.log('🏁 Request completed, setting loading to false')
       setLoading(false)
-        dataCache.current.currentRequest = null
     }
-    })()
-
-    // Store the request promise so other calls can wait for it
-    dataCache.current.currentRequest = requestPromise
-    
-    // Wait for the request to complete
-    await requestPromise
   }
-
-  // Load initial data only once
-  React.useEffect(() => {
-    console.log('🚀 useEffect triggered - mounting component')
-    if (!initialLoadTriggered.current) {
-      console.log('🎯 First time loading - triggering data fetch')
-      initialLoadTriggered.current = true
-      loadPackagingAttributes(false)
-    } else {
-      console.log('⚠️ useEffect called again but initial load already triggered')
-    }
-  }, []) // Empty dependency array to run only once on mount
 
   const resetForm = () => {
     setForm({
@@ -215,7 +141,7 @@ export default function PackagingAttributesPage() {
 
       // Invalidate cache and reload the data
       invalidatePackagingAttributesCache()
-      await loadPackagingAttributes(true) // Force refresh
+      await loadAttributes() // Force refresh
       setIsDialogOpen(false)
       resetForm()
       toast.success(editingAttribute ? 'Attribute updated successfully!' : 'Attribute created successfully!')
@@ -244,7 +170,7 @@ export default function PackagingAttributesPage() {
       
       // Invalidate cache and reload attributes
       invalidatePackagingAttributesCache()
-      await loadPackagingAttributes(true) // Force refresh
+      await loadAttributes() // Force refresh
       
       setDeleteModalOpen(false)
       setAttributeToDelete(null)

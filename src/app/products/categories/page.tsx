@@ -146,30 +146,8 @@ export default function CategoriesPage() {
     parentId: ''
   })
 
-  // Deduplication cache and initial load tracker
-  const initialLoadTriggered = React.useRef(false)
-
-  // Load categories on mount with deduplication
+  // Load data on mount
   React.useEffect(() => {
-    if (initialLoadTriggered.current) {
-      return
-    }
-    initialLoadTriggered.current = true
-
-    const loadCategories = async () => {
-      try {
-        setIsLoading(true)
-        const categoriesData = await getAllCategories()
-        setCategories(categoriesData)
-        console.log('📂 Loaded categories from Supabase:', categoriesData.length)
-      } catch (error) {
-        console.error('Error loading categories:', error)
-        toast.error('Failed to load categories')
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
     loadCategories()
   }, [])
 
@@ -313,6 +291,20 @@ export default function CategoriesPage() {
 
   const getCategoryChildren = (categoryId: string) => {
     return categories.filter(cat => cat.parent_id === categoryId)
+  }
+
+  const loadCategories = async () => {
+    try {
+      setIsLoading(true)
+      const categoriesData = await getAllCategories()
+      setCategories(categoriesData)
+      console.log('📂 Loaded categories from Supabase:', categoriesData.length)
+    } catch (error) {
+      console.error('Error loading categories:', error)
+      toast.error('Failed to load categories')
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   // Show loading state with skeleton

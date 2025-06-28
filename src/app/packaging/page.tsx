@@ -199,17 +199,10 @@ export default function PackagingPage() {
     await requestPromise
   }
 
-  // Load initial data only once
+  // Load data on mount
   React.useEffect(() => {
-    console.log('🚀 useEffect triggered - mounting component')
-    if (!initialLoadTriggered.current) {
-      console.log('🎯 First time loading - triggering data fetch')
-      initialLoadTriggered.current = true
-      loadPackagingWithStock(false)
-    } else {
-      console.log('⚠️ useEffect called again but initial load already triggered')
-    }
-  }, []) // Empty dependency array to run only once on mount
+    loadPackagingWithStock(false)
+  }, [])
 
   const filteredPackaging = packagingItems.filter(packaging => {
     const matchesSearch = packaging.title.toLowerCase().includes(searchTerm.toLowerCase()) ||

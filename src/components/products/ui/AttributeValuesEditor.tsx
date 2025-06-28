@@ -64,6 +64,7 @@ export function AttributeValuesEditor({
               placeholder={placeholder(index)}
               className="flex-1"
               disabled={disabled}
+              suppressHydrationWarning
             />
             {values.length > 1 && (
               <Button

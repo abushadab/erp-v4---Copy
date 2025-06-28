@@ -55,9 +55,6 @@ import { cn } from "@/lib/utils"
 import Link from 'next/link'
 
 export default function ExpensesPage() {
-  // Ref to track if initial load has been triggered
-  const initialLoadTriggered = React.useRef(false)
-  
   const [loading, setLoading] = useState(true)
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [expenseTypes, setExpenseTypes] = useState<ExpenseType[]>([])
@@ -81,17 +78,10 @@ export default function ExpensesPage() {
     description: ''
   })
 
-  // Load data on component mount only once
+  // Load data on mount
   useEffect(() => {
-    console.log('🚀 useEffect triggered - mounting expenses component')
-    if (!initialLoadTriggered.current) {
-      console.log('🎯 First time loading - triggering data fetch')
-      initialLoadTriggered.current = true
-      loadData()
-    } else {
-      console.log('⚠️ useEffect called again but initial load already triggered')
-    }
-  }, []) // Empty dependency array to run only once on mount
+    loadData()
+  }, [])
 
   const loadData = async () => {
     console.log('🔄 loadData called in expenses page')

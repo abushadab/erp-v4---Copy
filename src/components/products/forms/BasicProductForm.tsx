@@ -69,6 +69,8 @@ export function BasicProductForm({
             value={form.name}
             onChange={(e) => handleNameChange(e.target.value)}
             placeholder="Enter product name"
+            required
+            suppressHydrationWarning
           />
         </div>
         
@@ -88,8 +90,9 @@ export function BasicProductForm({
           <Select
             value={form.categoryId}
             onValueChange={handleCategoryChange}
+            required
           >
-            <SelectTrigger>
+            <SelectTrigger suppressHydrationWarning>
               <SelectValue placeholder="Select category" />
             </SelectTrigger>
             <SelectContent>

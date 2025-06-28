@@ -1,130 +1,85 @@
-import * as React from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
 import { 
-  getSuppliers, 
-  getWarehouses, 
+  getSuppliers,
   type DatabaseSupplier, 
   type DatabaseWarehouse,
 } from '@/lib/supabase/purchases'
 import { 
-  getProducts, 
+  getProducts,
   getPackaging, 
   type DatabaseProduct, 
   type DatabasePackaging,
+  getWarehouses
 } from '@/lib/supabase/queries'
 import { apiCache } from '@/lib/supabase/cache'
 
-export interface UsePurchaseFormDataReturn {
-  // Data
+export interface PurchaseFormData {
   suppliers: DatabaseSupplier[]
   warehouses: DatabaseWarehouse[]
   products: DatabaseProduct[]
-  packages: DatabasePackaging[]
-  
-  // Loading states
-  dataLoading: boolean
-  
-  // Methods
-  loadData: (forceRefresh?: boolean, isInitialLoad?: boolean) => Promise<void>
+  packaging: DatabasePackaging[]
+}
+
+export interface UsePurchaseFormDataReturn {
+  data: PurchaseFormData
+  loading: boolean
+  error: string | null
+  refreshData: () => Promise<void>
 }
 
 export function usePurchaseFormData(): UsePurchaseFormDataReturn {
-  // State for data
-  const [suppliers, setSuppliers] = React.useState<DatabaseSupplier[]>([])
-  const [warehouses, setWarehouses] = React.useState<DatabaseWarehouse[]>([])
-  const [products, setProducts] = React.useState<DatabaseProduct[]>([])
-  const [packages, setPackages] = React.useState<DatabasePackaging[]>([])
-  
-  // Loading state
-  const [dataLoading, setDataLoading] = React.useState(true)
-  
-  // Deduplication and initial load tracker
-  const initialLoadTriggered = React.useRef(false)
-  
-  // Load data from Supabase with enhanced deduplication using global cache
-  const loadData = React.useCallback(async (forceRefresh = false, isInitialLoad = false) => {
-    console.log('🔍 loadData called with forceRefresh:', forceRefresh, 'isInitialLoad:', isInitialLoad)
-    
-    // For initial load, we're already in loading state, so don't check dataLoading
-    // For subsequent calls, check if we're already loading to prevent overlapping requests
-    if (!isInitialLoad && dataLoading && !forceRefresh) {
-      console.log('⏳ Data already loading, skipping...')
-      return
-    }
+  const [data, setData] = useState<PurchaseFormData>({
+    suppliers: [],
+    warehouses: [],
+    products: [],
+    packaging: []
+  })
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
+  const loadData = useCallback(async (forceRefresh = false) => {
     try {
-      // Only set loading to true if not already true (for initial load)
-      if (!dataLoading) {
-        setDataLoading(true)
-      }
-      
-      console.log('🔄 Fetching data using global cache')
-      
+      setLoading(true)
+      setError(null)
+
       // Use global apiCache for all data fetching
-      const [suppliersData, warehousesData, productsData, packagesData] = await Promise.all([
+      const [suppliers, warehouses, products, packaging] = await Promise.all([
         apiCache.get('suppliers-active', () => getSuppliers()),
         apiCache.get('warehouses-all', () => getWarehouses()),
         apiCache.get('products-all', () => getProducts()),
         apiCache.get('packaging-all', () => getPackaging())
       ])
-      
-      const activeProducts = productsData.filter(p => p.status === 'active')
-      const activePackages = packagesData.filter(p => p.status === 'active')
-      
-      console.log('✅ Data fetched successfully using global cache', {
-        suppliers: suppliersData.length,
-        warehouses: warehousesData.length,
-        products: activeProducts.length,
-        packages: activePackages.length
-      })
-      
-      // Update state
-      setSuppliers(suppliersData)
-      setWarehouses(warehousesData)
-      setProducts(activeProducts)
-      setPackages(activePackages)
-      
-    } catch (error) {
-      console.error('❌ Error loading data:', error)
-      
-      // Provide fallback data on error
-      setSuppliers([])
-      setWarehouses([])
-      setProducts([])
-      setPackages([])
-      
-      toast.error('Failed to load data. Please refresh the page.')
-    } finally {
-      console.log('🏁 Request completed, setting loading to false')
-      setDataLoading(false)
-    }
-  }, []) // Remove dataLoading dependency to prevent circular re-creation
 
-  // Load initial data only once with enhanced protection against React Strict Mode
-  React.useEffect(() => {
-    console.log('🚀 useEffect triggered - mounting component')
-    
-    // Double protection against React Strict Mode
-    if (!initialLoadTriggered.current) {
-      console.log('🎯 First time loading - triggering data fetch')
-      initialLoadTriggered.current = true
-      loadData(false, true) // Pass isInitialLoad = true
-    } else {
-      console.log('⚠️ useEffect called again but initial load already triggered')
+      setData({
+        suppliers,
+        warehouses,
+        products,
+        packaging
+      })
+    } catch (err) {
+      console.error('Error loading purchase form data:', err)
+      setError('Failed to load form data. Please refresh the page.')
+      toast.error('Failed to load purchase form data')
+    } finally {
+      setLoading(false)
     }
-  }, []) // Empty dependency array to run only on mount
+  }, [])
+
+  const refreshData = useCallback(async () => {
+    await loadData(true)
+    toast.success('Form data refreshed successfully')
+  }, [loadData])
+
+  // Load initial data on mount
+  useEffect(() => {
+    loadData(false)
+  }, [])
 
   return {
-    // Data
-    suppliers,
-    warehouses,
-    products,
-    packages,
-    
-    // Loading states
-    dataLoading,
-    
-    // Methods
-    loadData
+    data,
+    loading,
+    error,
+    refreshData
   }
 } 

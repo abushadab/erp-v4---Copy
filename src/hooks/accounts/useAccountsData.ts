@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
 import { 
   getAccountsWithCategories,
@@ -45,10 +45,6 @@ export function useAccountsData(): UseAccountsDataReturn {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   
-  // Refs for preventing duplicate calls
-  const initialLoadTriggered = useRef(false)
-  const mountedRef = useRef(true)
-  
   // Load data with enhanced caching and deduplication
   const loadData = useCallback(async (forceRefresh = false) => {
     // Prevent duplicate calls if not force refresh
@@ -76,29 +72,22 @@ export function useAccountsData(): UseAccountsDataReturn {
           : apiCache.get('financial-summary', () => getFinancialSummary())
       ])
       
-      // Only update state if component is still mounted
-      if (mountedRef.current) {
-        setAccounts(accountsData)
-        setCategories(categoriesData)
-        setFinancialSummary(financialSummaryData)
-      }
+      setAccounts(accountsData)
+      setCategories(categoriesData)
+      setFinancialSummary(financialSummaryData)
       
     } catch (error) {
       console.error('Error loading accounts data:', error)
       
-      if (mountedRef.current) {
-        // Provide fallback data on error
-        setAccounts([])
-        setCategories([])
-        setFinancialSummary(null)
-        
-        toast.error('Failed to load accounts data. Please refresh the page.')
-      }
+      // Provide fallback data on error
+      setAccounts([])
+      setCategories([])
+      setFinancialSummary(null)
+      
+      toast.error('Failed to load accounts data. Please refresh the page.')
     } finally {
-      if (mountedRef.current) {
-        setLoading(false)
-        setRefreshing(false)
-      }
+      setLoading(false)
+      setRefreshing(false)
     }
   }, [loading, refreshing])
 
@@ -108,20 +97,9 @@ export function useAccountsData(): UseAccountsDataReturn {
     toast.success("Data refreshed successfully.")
   }, [loadData])
 
-  // Load initial data only once with enhanced protection against React Strict Mode
+  // Load initial data on mount
   useEffect(() => {
-    // Double protection against React Strict Mode
-    if (!initialLoadTriggered.current) {
-      initialLoadTriggered.current = true
-      loadData(false)
-    }
-  }, []) // Empty dependency array to run only on mount
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      mountedRef.current = false
-    }
+    loadData(false)
   }, [])
 
   return {

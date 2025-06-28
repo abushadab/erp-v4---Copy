@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { DatabaseAttribute } from './useProductData'
 
 interface Category {
   id: string
@@ -35,11 +36,11 @@ interface Attribute {
 // Reuse the existing cache from useProductData but for add page data
 const dataCache = {
   categories: [] as Category[],
-  attributes: [] as Attribute[],
+  attributes: [] as DatabaseAttribute[],
   lastFetch: { categories: 0, attributes: 0 },
   currentRequests: {
     categories: null as Promise<Category[]> | null,
-    attributes: null as Promise<Attribute[]> | null
+    attributes: null as Promise<DatabaseAttribute[]> | null
   }
 }
 
@@ -101,7 +102,7 @@ async function getCategories(forceRefresh = false): Promise<Category[]> {
   return await requestPromise
 }
 
-async function getAttributes(forceRefresh = false): Promise<Attribute[]> {
+async function getAttributes(forceRefresh = false): Promise<DatabaseAttribute[]> {
   const now = Date.now()
 
   // Check cache first
@@ -119,7 +120,7 @@ async function getAttributes(forceRefresh = false): Promise<Attribute[]> {
   }
 
   // Create a new request promise
-  const requestPromise = (async (): Promise<Attribute[]> => {
+  const requestPromise = (async (): Promise<DatabaseAttribute[]> => {
     try {
       console.log('🔄 Fetching fresh attributes data from API (add page)')
       const supabase = createClient()
@@ -150,9 +151,9 @@ async function getAttributes(forceRefresh = false): Promise<Attribute[]> {
       const attributeValues = attributeValuesResult.data || []
 
       // Combine attributes with their values
-      const result = attributes.map(attr => ({
+      const result: DatabaseAttribute[] = attributes.map((attr: any) => ({
         ...attr,
-        values: attributeValues.filter(val => val.attribute_id === attr.id)
+        values: attributeValues.filter((val: any) => val.attribute_id === attr.id)
       }))
       
       // Update cache
@@ -177,10 +178,10 @@ async function getAttributes(forceRefresh = false): Promise<Attribute[]> {
 
 export function useAddProductData() {
   const [categories, setCategories] = useState<Category[]>([])
-  const [attributes, setAttributes] = useState<Attribute[]>([])
+  const [attributes, setAttributes] = useState<DatabaseAttribute[]>([])
   const [loading, setLoading] = useState({
-    categories: false,
-    attributes: false
+    categories: true,
+    attributes: true
   })
   const [errors, setErrors] = useState({
     categories: null as string | null,

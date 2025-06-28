@@ -148,17 +148,15 @@ export default function AddProductPage() {
       if (productForm.form.type === 'variation') {
         for (const variation of productForm.form.variations) {
           variations.push({
+            product_id: '', // Will be set by the backend
             sku: variation.sku,
             price: variation.price,
-            attribute_values: variation.attribute_values
+            attribute_values: variation.attributeValues
           })
         }
       }
 
-      await createCompleteProduct(productData, {
-        attributes: productForm.form.selectedAttributes,
-        variations
-      })
+      await createCompleteProduct(productData, variations, productForm.form.selectedAttributes)
 
       toast.success('Success', {
         description: 'Product created successfully'

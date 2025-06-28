@@ -62,7 +62,7 @@ export function VariationsTable({
               Manage different variations of this product
             </CardDescription>
           </div>
-          <Button onClick={onAddVariation} size="sm">
+          <Button onClick={onAddVariation} size="sm" type="button">
             <Plus className="mr-2 h-4 w-4" />
             Add Variation
           </Button>
@@ -74,7 +74,7 @@ export function VariationsTable({
             <p className="text-muted-foreground mb-4">
               No variations created yet. Add your first variation to get started.
             </p>
-            <Button onClick={onAddVariation} variant="outline">
+            <Button onClick={onAddVariation} variant="outline" type="button">
               <Plus className="mr-2 h-4 w-4" />
               Create First Variation
             </Button>

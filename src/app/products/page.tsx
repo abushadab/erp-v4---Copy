@@ -212,32 +212,24 @@ export default function ProductsPage() {
   const [selectedProduct, setSelectedProduct] = React.useState<Product | null>(null)
   const [isViewModalOpen, setIsViewModalOpen] = React.useState(false)
 
-  // Deduplication cache and initial load tracker
-  const initialLoadTriggered = React.useRef(false)
-
-  // Load products on mount with deduplication
+  // Load initial data on mount
   React.useEffect(() => {
-    if (initialLoadTriggered.current) {
-      return
-    }
-    initialLoadTriggered.current = true
-
-    const loadProducts = async () => {
-      try {
-        setIsLoading(true)
-        const productsData = await getAllProducts()
-        setProducts(productsData)
-        console.log('📦 Loaded products from Supabase:', productsData.length)
-      } catch (error) {
-        console.error('Error loading products:', error)
-        toast.error('Failed to load products')
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    loadProducts()
+    loadData()
   }, [])
+
+  const loadData = async () => {
+    try {
+      setIsLoading(true)
+      const productsData = await getAllProducts()
+      setProducts(productsData)
+      console.log('📦 Loaded products from Supabase:', productsData.length)
+    } catch (error) {
+      console.error('Error loading products:', error)
+      toast.error('Failed to load products')
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   const filteredProducts = products.filter(product => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||

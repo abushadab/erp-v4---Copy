@@ -38,7 +38,7 @@ export function VariationProductFields({
             <p className="text-muted-foreground mb-4">
               No attributes available. Create your first attribute to get started.
             </p>
-            <Button onClick={onCreateAttribute} size="sm">
+            <Button onClick={onCreateAttribute} size="sm" type="button">
               <Plus className="mr-2 h-4 w-4" />
               Create Attribute
             </Button>
@@ -85,6 +85,7 @@ export function VariationProductFields({
                 variant="outline"
                 size="sm"
                 onClick={onCreateAttribute}
+                type="button"
               >
                 <Plus className="mr-2 h-4 w-4" />
                 Create New Attribute

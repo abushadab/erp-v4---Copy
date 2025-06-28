@@ -26,72 +26,138 @@ import type {
 } from '@/lib/hooks/useProductData'
 import { safeParsePrice } from '@/lib/utils/productTransforms'
 
-interface ValidationState {
-  isChecking: boolean
-  isValid: boolean | null
-  message: string
+// Interface for the variation data that gets submitted
+interface VariationSubmitData {
+  sku: string
+  price?: number
+  attributeValues: { [attributeId: string]: string }
 }
 
-interface VariationForm {
+// Interface for existing variations (for validation)
+interface ExistingVariation {
+  id: string
   sku: string
-  sellingPrice?: number
+  price: number
   attributeValues: { [attributeId: string]: string }
 }
 
 interface AddVariationModalProps {
-  isOpen: boolean
-  onClose: () => void
-  variationForm: VariationForm
-  onVariationFormChange: (form: VariationForm) => void
-  skuValidation: ValidationState
-  selectedAttributes: string[]
+  open: boolean
+  onOpenChange: (open: boolean) => void
   attributes: DatabaseAttribute[]
-  onAddVariation: () => void
-  onReset: () => void
+  selectedAttributes: string[]
+  existingVariations: ExistingVariation[]
+  onSubmit: (variationData: VariationSubmitData) => void
 }
 
 export function AddVariationModal({
-  isOpen,
-  onClose,
-  variationForm,
-  onVariationFormChange,
-  skuValidation,
-  selectedAttributes,
+  open,
+  onOpenChange,
   attributes,
-  onAddVariation,
-  onReset
+  selectedAttributes,
+  existingVariations,
+  onSubmit
 }: AddVariationModalProps) {
+  // Local form state
+  const [sku, setSku] = React.useState('')
+  const [price, setPrice] = React.useState<number | undefined>(undefined)
+  const [attributeValues, setAttributeValues] = React.useState<{ [attributeId: string]: string }>({})
+  
+  // Validation state
+  const [skuError, setSkuError] = React.useState<string | null>(null)
+  const [formError, setFormError] = React.useState<string | null>(null)
+
+  // Reset form when modal opens
+  React.useEffect(() => {
+    if (open) {
+      setSku('')
+      setPrice(undefined)
+      setAttributeValues({})
+      setSkuError(null)
+      setFormError(null)
+    }
+  }, [open])
+
   const handleSkuChange = (value: string) => {
-    onVariationFormChange({
-      ...variationForm,
-      sku: value
-    })
+    setSku(value)
+    
+    // Validate SKU uniqueness
+    if (value.trim()) {
+      const isDuplicate = existingVariations.some(variation => 
+        variation.sku.toLowerCase() === value.toLowerCase()
+      )
+      
+      if (isDuplicate) {
+        setSkuError('This SKU already exists')
+      } else {
+        setSkuError(null)
+      }
+    } else {
+      setSkuError(null)
+    }
   }
 
   const handlePriceChange = (value: string) => {
-    onVariationFormChange({
-      ...variationForm,
-      sellingPrice: safeParsePrice(value)
-    })
+    setPrice(value ? parseFloat(value) : undefined)
   }
 
   const handleAttributeValueChange = (attributeId: string, valueId: string) => {
-    onVariationFormChange({
-      ...variationForm,
-      attributeValues: {
-        ...variationForm.attributeValues,
-        [attributeId]: valueId
+    setAttributeValues(prev => ({
+      ...prev,
+      [attributeId]: valueId
+    }))
+  }
+
+  const handleSubmit = () => {
+    // Validate form
+    if (!sku.trim()) {
+      setFormError('SKU is required')
+      return
+    }
+
+    if (skuError) {
+      setFormError('Please fix the SKU error before continuing')
+      return
+    }
+
+    // Check if all selected attributes have values
+    for (const attributeId of selectedAttributes) {
+      if (!attributeValues[attributeId]) {
+        const attribute = attributes.find(attr => attr.id === attributeId)
+        setFormError(`Please select a value for ${attribute?.name || 'attribute'}`)
+        return
       }
+    }
+
+    // Check for duplicate attribute combination
+    const isDuplicateCombination = existingVariations.some(variation => {
+      return selectedAttributes.every(attrId => 
+        variation.attributeValues[attrId] === attributeValues[attrId]
+      )
     })
+
+    if (isDuplicateCombination) {
+      setFormError('This combination of attributes already exists')
+      return
+    }
+
+    // Submit the variation
+    onSubmit({
+      sku: sku.trim(),
+      price,
+      attributeValues
+    })
+
+    // Close modal
+    onOpenChange(false)
   }
 
   const handleCancel = () => {
-    onReset()
-    onClose()
+    onOpenChange(false)
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Add New Variation</DialogTitle>
@@ -101,38 +167,26 @@ export function AddVariationModal({
         </DialogHeader>
         
         <div className="space-y-4">
+          {/* Form Error */}
+          {formError && (
+            <div className="p-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md">
+              {formError}
+            </div>
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="add-variation-sku">SKU *</Label>
-              <div className="relative">
-                <Input
-                  id="add-variation-sku"
-                  value={variationForm.sku}
-                  onChange={(e) => handleSkuChange(e.target.value)}
-                  placeholder="Enter variation SKU"
-                  className={
-                    skuValidation.isValid === false 
-                      ? "border-red-500 focus-visible:ring-red-500" 
-                      : skuValidation.isValid === true 
-                        ? "border-green-500 focus-visible:ring-green-500" 
-                        : ""
-                  }
-                />
-                {skuValidation.isChecking && (
-                  <div className="absolute right-3 top-3">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
-                  </div>
-                )}
-              </div>
-              {skuValidation.message && (
-                <p className={`text-xs ${
-                  skuValidation.isValid === false 
-                    ? "text-red-600" 
-                    : skuValidation.isValid === true 
-                      ? "text-green-600" 
-                      : "text-gray-600"
-                }`}>
-                  {skuValidation.message}
+              <Input
+                id="add-variation-sku"
+                value={sku}
+                onChange={(e) => handleSkuChange(e.target.value)}
+                placeholder="Enter variation SKU"
+                className={skuError ? "border-red-500 focus-visible:ring-red-500" : ""}
+              />
+              {skuError && (
+                <p className="text-xs text-red-600">
+                  {skuError}
                 </p>
               )}
             </div>
@@ -144,7 +198,7 @@ export function AddVariationModal({
                 type="number"
                 step="0.01"
                 min="0"
-                value={variationForm.sellingPrice || ''}
+                value={price || ''}
                 onChange={(e) => handlePriceChange(e.target.value)}
                 placeholder="0.00"
               />
@@ -158,7 +212,7 @@ export function AddVariationModal({
                 <div key={attributeId} className="space-y-2">
                   <Label>{attribute?.name} *</Label>
                   <Select
-                    value={variationForm.attributeValues[attributeId] || ''}
+                    value={attributeValues[attributeId] || ''}
                     onValueChange={(value) => handleAttributeValueChange(attributeId, value)}
                   >
                     <SelectTrigger>
@@ -182,7 +236,7 @@ export function AddVariationModal({
           <Button variant="outline" onClick={handleCancel}>
             Cancel
           </Button>
-          <Button onClick={onAddVariation}>
+          <Button onClick={handleSubmit}>
             Add Variation
           </Button>
         </DialogFooter>

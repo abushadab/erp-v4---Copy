@@ -83,6 +83,15 @@ import {
   useAttributeManagement
 } from '@/lib/hooks/products'
 
+// Import modals
+import { 
+  AddVariationModal,
+  EditVariationModal,
+  DeleteVariationModal,
+  CreateAttributeModal,
+  EditAttributeModal
+} from '@/components/products/modals'
+
 interface ProductForm {
   name: string
   description: string
@@ -274,6 +283,7 @@ export default function EditProductPage() {
                     value={productForm.form.name}
                     onChange={(e) => productForm.updateName(e.target.value)}
                     placeholder="Enter product name"
+                    suppressHydrationWarning
                   />
                 </div>
 
@@ -285,6 +295,7 @@ export default function EditProductPage() {
                     onChange={(e) => productForm.updateDescription(e.target.value)}
                     placeholder="Enter product description"
                     rows={4}
+                    suppressHydrationWarning
                   />
                 </div>
 
@@ -295,7 +306,7 @@ export default function EditProductPage() {
                       value={productForm.form.categoryId}
                       onValueChange={productForm.updateCategory}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger suppressHydrationWarning>
                         <SelectValue placeholder="Select category" />
                       </SelectTrigger>
                       <SelectContent>
@@ -314,7 +325,7 @@ export default function EditProductPage() {
                       value={productForm.form.status}
                       onValueChange={productForm.updateStatus}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger suppressHydrationWarning>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -345,7 +356,7 @@ export default function EditProductPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="sku">SKU *</Label>
                     <div className="relative">
@@ -354,6 +365,7 @@ export default function EditProductPage() {
                         value={productForm.form.sku || ''}
                         onChange={(e) => productForm.updateSku(e.target.value)}
                         placeholder="Enter SKU"
+                        suppressHydrationWarning
                         className={
                           skuValidation.isError
                             ? "border-orange-500 focus-visible:ring-orange-500"
@@ -395,6 +407,7 @@ export default function EditProductPage() {
                       value={productForm.form.sellingPrice || ''}
                       onChange={(e) => productForm.updatePrice(e.target.value ? parseFloat(e.target.value) : undefined)}
                       placeholder="0.00"
+                      suppressHydrationWarning
                     />
                   </div>
                 </div>
@@ -441,17 +454,33 @@ export default function EditProductPage() {
                     status: productForm.form.status,
                     sku: productForm.form.sku,
                     price: productForm.form.sellingPrice,
-                    parent_sku: productForm.form.parentSku,
-                    variations: productForm.form.variations.map(v => ({
+                    parent_sku: productForm.form.parentSku
+                  }
+
+                  const variationUpdates: UpdateProductVariationData[] = productForm.form.variations
+                    .filter(v => !v.id.startsWith('temp-'))
+                    .map(v => ({
                       id: v.id,
                       sku: v.sku,
                       price: v.price,
                       attribute_values: v.attributeValues
-                    })),
-                    deleted_variation_ids: deletedVariationIds
-                  }
+                    }))
+
+                  const newVariations: CreateProductVariationData[] = productForm.form.variations
+                    .filter(v => v.id.startsWith('temp-'))
+                    .map(v => ({
+                      product_id: productId,
+                      sku: v.sku,
+                      price: v.price,
+                      attribute_values: v.attributeValues
+                    }))
                   
-                  await updateCompleteProduct(updateData)
+                  await updateCompleteProduct(
+                    updateData,
+                    variationUpdates,
+                    newVariations,
+                    productForm.form.selectedAttributes
+                  )
                   toast.success('Product updated successfully')
                   productForm.showSuccessMessage()
                   
@@ -473,6 +502,85 @@ export default function EditProductPage() {
           <ProductSummary product={product} />
         </div>
       </div>
+
+      {/* Variation Modals */}
+      <AddVariationModal
+        open={variationManagement.showAddModal}
+        onOpenChange={variationManagement.closeAddModal}
+        attributes={attributes}
+        selectedAttributes={productForm.form.selectedAttributes}
+        existingVariations={productForm.form.variations}
+        onSubmit={(variationData) => {
+          const newVariation: ProductVariation = {
+            id: `temp-${Date.now()}`,
+            productId: productId,
+            sku: variationData.sku,
+            price: variationData.price || 0,
+            buyingPrice: 0,
+            stock: 0,
+            boughtQuantity: 0,
+            attributeValues: variationData.attributeValues
+          }
+          productForm.addVariation(newVariation)
+          variationManagement.closeAddModal()
+        }}
+      />
+
+      <EditVariationModal
+        open={variationManagement.showEditModal}
+        onOpenChange={variationManagement.closeEditModal}
+        attributes={attributes}
+        selectedAttributes={productForm.form.selectedAttributes}
+        existingVariations={productForm.form.variations}
+        editingIndex={variationManagement.editingIndex ?? -1}
+        variation={variationManagement.editingIndex !== null ? productForm.form.variations[variationManagement.editingIndex] : undefined}
+        onSubmit={(variationData) => {
+          if (variationManagement.editingIndex !== null) {
+            const updatedVariation: ProductVariation = {
+              ...productForm.form.variations[variationManagement.editingIndex],
+              sku: variationData.sku,
+              price: variationData.price || 0,
+              attributeValues: variationData.attributeValues
+            }
+            productForm.updateVariation(variationManagement.editingIndex, updatedVariation)
+          }
+          variationManagement.closeEditModal()
+        }}
+      />
+
+      <DeleteVariationModal
+        open={variationManagement.showDeleteModal}
+        onOpenChange={variationManagement.closeDeleteModal}
+        variation={variationManagement.deletingIndex !== null ? productForm.form.variations[variationManagement.deletingIndex] : undefined}
+        attributes={attributes}
+        onConfirm={() => {
+          if (variationManagement.deletingIndex !== null) {
+            productForm.removeVariation(variationManagement.deletingIndex)
+          }
+          variationManagement.closeDeleteModal()
+        }}
+        isLoading={false}
+      />
+
+      {/* Attribute Modals */}
+      <CreateAttributeModal
+        open={attributeManagement.showCreateModal}
+        onOpenChange={attributeManagement.closeCreateModal}
+        onSuccess={(newAttributeId) => {
+          // Auto-select the newly created attribute
+          productForm.toggleAttribute(newAttributeId)
+          attributeManagement.closeCreateModal()
+        }}
+      />
+
+      <EditAttributeModal
+        open={attributeManagement.showEditModal}
+        onOpenChange={attributeManagement.closeEditModal}
+        attribute={attributeManagement.editForm}
+        onSuccess={() => {
+          attributeManagement.closeEditModal()
+        }}
+      />
     </div>
   )
 }

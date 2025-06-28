@@ -22,7 +22,7 @@ export function createClient() {
         autoRefreshToken: true,
         // Production-optimized settings
         flowType: 'implicit',
-        debug: true
+        debug: false // Disable GoTrueClient debug logging
       },
       global: {
         headers: {

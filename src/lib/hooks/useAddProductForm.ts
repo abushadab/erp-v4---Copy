@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import type { ProductVariation } from '@/lib/types'
 
 interface ProductForm {
@@ -127,8 +127,13 @@ export function useAddProductForm() {
   }, [])
 
   // Computed properties
-  const canAddVariations = form.selectedAttributes.length > 0
-  const hasVariations = form.variations.length > 0
+  const canAddVariations = useMemo(() => {
+    return form.selectedAttributes.length > 0
+  }, [form.selectedAttributes])
+
+  const hasVariations = useMemo(() => {
+    return form.variations.length > 0
+  }, [form.variations])
 
   // Success message
   const showSuccessMessage = useCallback(() => {

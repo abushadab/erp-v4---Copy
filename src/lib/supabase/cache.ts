@@ -17,7 +17,6 @@ class APICache {
   async get<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
     // Check if there's already a pending request for this key with timeout protection
     if (this.pendingRequests.has(key)) {
-      console.log('🔄 Request already pending for:', key)
       try {
         // Add timeout to prevent waiting forever for stuck promises
         const existingRequest = this.pendingRequests.get(key)!
@@ -37,7 +36,6 @@ class APICache {
     const cacheDuration = this.isCriticalData(key) ? this.CRITICAL_DATA_CACHE_DURATION : this.CACHE_DURATION
     
     if (cached && Date.now() - cached.timestamp < cacheDuration) {
-      // console.log(`✅ Cache hit for: ${key} (${this.isCriticalData(key) ? 'critical' : 'standard'} data)`)
       return cached.data
     }
 
@@ -45,8 +43,6 @@ class APICache {
     if (cached) {
       this.cache.delete(key)
     }
-
-    // console.log(`🔍 Cache miss - fetching: ${key} (${this.isCriticalData(key) ? 'critical' : 'standard'} data)`)
     
     // Create timeout for the entire operation
     const timeoutId = setTimeout(() => {
@@ -95,7 +91,6 @@ class APICache {
           const { createClient } = await import('@/lib/supabase/client')
           const supabase = createClient()
           await supabase.auth.getSession()
-          console.log('✅ Session refreshed, retrying request')
         } catch (sessionError) {
           console.error('❌ Failed to refresh session:', sessionError)
           // If session refresh fails, redirect to login
@@ -116,13 +111,11 @@ class APICache {
   invalidate(key: string) {
     this.cache.delete(key)
     this.pendingRequests.delete(key)
-    console.log('🗑️ Cache invalidated for:', key)
   }
 
   clear() {
     this.cache.clear()
     this.pendingRequests.clear()
-    console.log('🧹 Cache cleared')
   }
   
   // Debug method to show current cache state
@@ -142,10 +135,7 @@ class APICache {
       this.cache.delete(key)
       this.pendingRequests.delete(key)
     })
-    console.log(`🗑️ Pattern cache invalidation for "${pattern}": ${keysToInvalidate.length} keys cleared`)
   }
-
-
 }
 
 // Export a singleton instance
@@ -159,6 +149,4 @@ if (typeof window !== 'undefined') {
     invalidate: (key: string) => apiCache.invalidate(key),
     invalidateByPattern: (pattern: string) => apiCache.invalidateByPattern(pattern)
   }
-  // console.log('🔧 API cache debugging available at window.debugApiCache')
-  // console.log('✅ ERP low-caching system initialized')
 } 

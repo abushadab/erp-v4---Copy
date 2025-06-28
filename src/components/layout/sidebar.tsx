@@ -500,7 +500,7 @@ export function Sidebar({ children }: SidebarProps) {
       <div className="flex-1 flex flex-col lg:ml-0">
         {/* Top bar */}
         <header 
-          className="sticky top-0 z-40 px-4 sm:px-6 py-4 lg:px-8 transition-all duration-200"
+          className="sticky top-0 z-40 px-4 sm:px-6 py-4 lg:px-6 transition-all duration-200"
           style={{ 
             backgroundColor: isSticky ? '#fff' : '#f4f8f9',
             boxShadow: isSticky ? '0 2px 8px #00000005' : 'none'

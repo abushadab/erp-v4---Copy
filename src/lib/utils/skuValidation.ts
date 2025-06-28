@@ -25,7 +25,6 @@ export async function validateSkuUnique(sku: string, excludeId: string = '', for
   if (!forceRefresh) {
     const cached = skuValidationCache.validations.get(cacheKey)
     if (cached && (now - cached.timestamp) < CACHE_DURATION) {
-      console.log('📦 Using cached SKU validation for', sku)
       return cached.result
     }
   }
@@ -33,20 +32,17 @@ export async function validateSkuUnique(sku: string, excludeId: string = '', for
   // If there's already a request in progress, wait for it
   const existingRequest = skuValidationCache.currentRequests.get(cacheKey)
   if (existingRequest) {
-    console.log('⏳ SKU validation request already in progress, waiting for existing promise...')
     return await existingRequest
   }
 
   // Create a new request promise
   const requestPromise = (async (): Promise<boolean> => {
     try {
-      console.log('🔄 Fetching fresh SKU validation from API for', sku)
       const exists = await checkSkuExists(sku, excludeId)
       
       // Update cache
       skuValidationCache.validations.set(cacheKey, { result: exists, timestamp: now })
       
-      console.log('✅ SKU validation completed')
       return exists
     } catch (error) {
       console.error('❌ Error validating SKU:', error)

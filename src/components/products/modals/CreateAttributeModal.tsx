@@ -14,44 +14,43 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { AttributeValuesEditor } from '@/components/products/ui/AttributeValuesEditor'
-
-interface CreateAttributeForm {
-  name: string
-  values: string[]
-}
+import { useAttributeManagement } from '@/lib/hooks/useAttributeManagement'
+import { toast } from 'sonner'
 
 interface CreateAttributeModalProps {
-  isOpen: boolean
-  onClose: () => void
-  form: CreateAttributeForm
-  onFormChange: (form: CreateAttributeForm) => void
-  isCreating: boolean
-  onCreateAttribute: () => void
-  onAddValue: () => void
-  onUpdateValue: (index: number, value: string) => void
-  onRemoveValue: (index: number) => void
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onSuccess?: (attributeId: string) => void
 }
 
 export function CreateAttributeModal({
-  isOpen,
-  onClose,
-  form,
-  onFormChange,
-  isCreating,
-  onCreateAttribute,
-  onAddValue,
-  onUpdateValue,
-  onRemoveValue
+  open,
+  onOpenChange,
+  onSuccess
 }: CreateAttributeModalProps) {
-  const handleNameChange = (value: string) => {
-    onFormChange({
-      ...form,
-      name: value
-    })
+  const attributeManagement = useAttributeManagement()
+
+  const handleCreateAttribute = async () => {
+    const validation = attributeManagement.validateCreateForm()
+    if (!validation.isValid) {
+      toast.error(validation.error)
+      return
+    }
+
+    try {
+      await attributeManagement.createNewAttribute(onSuccess ? (attributeId: string) => {
+        onSuccess(attributeId)
+        onOpenChange(false)
+      } : () => {
+        onOpenChange(false)
+      })
+    } catch (error) {
+      console.error('Error creating attribute:', error)
+    }
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Create New Attribute</DialogTitle>
@@ -65,19 +64,19 @@ export function CreateAttributeModal({
             <Label htmlFor="attribute-name">Attribute Name *</Label>
             <Input
               id="attribute-name"
-              value={form.name}
-              onChange={(e) => handleNameChange(e.target.value)}
+              value={attributeManagement.createForm.name}
+              onChange={(e) => attributeManagement.updateCreateName(e.target.value)}
               placeholder="e.g., Size, Color, Material"
             />
           </div>
 
           <AttributeValuesEditor
-            values={form.values}
-            onAddValue={onAddValue}
-            onUpdateValue={onUpdateValue}
-            onRemoveValue={onRemoveValue}
+            values={attributeManagement.createForm.values}
+            onAddValue={attributeManagement.addCreateValue}
+            onUpdateValue={attributeManagement.updateCreateValue}
+            onRemoveValue={attributeManagement.removeCreateValue}
             label="Attribute Values *"
-            disabled={isCreating}
+            disabled={attributeManagement.isCreating}
             showAddButton={false} // We'll show the add button at the bottom only
           />
 
@@ -90,17 +89,19 @@ export function CreateAttributeModal({
 
         <DialogFooter>
           <Button
+            type="button"
             variant="outline"
-            onClick={onClose}
-            disabled={isCreating}
+            onClick={() => onOpenChange(false)}
+            disabled={attributeManagement.isCreating}
           >
             Cancel
           </Button>
           <Button
-            onClick={onCreateAttribute}
-            disabled={isCreating}
+            type="button"
+            onClick={handleCreateAttribute}
+            disabled={attributeManagement.isCreating}
           >
-            {isCreating ? (
+            {attributeManagement.isCreating ? (
               <>
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                 Creating...

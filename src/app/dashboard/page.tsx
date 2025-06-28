@@ -219,10 +219,22 @@ export default function DashboardPage() {
   const [timePeriod, setTimePeriod] = React.useState<'today' | 'week' | 'month'>('month')
   const [refreshing, setRefreshing] = React.useState(false)
   
-  // Add ref to prevent duplicate calls
-  const loadingRef = React.useRef(false)
-  const dataLoadedRef = React.useRef(false)
-  const mountedRef = React.useRef(false)
+  // Load dashboard data
+  React.useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoading(true)
+        const dashboardData = await getDashboardData()
+        setStats(dashboardData)
+      } catch (error) {
+        console.error('Dashboard data loading failed:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    
+    loadData()
+  }, [])
 
   // Clear cache function
   const clearCache = () => {
@@ -242,73 +254,22 @@ export default function DashboardPage() {
   const handleRefresh = React.useCallback(async () => {
     setRefreshing(true)
     clearCache() // Clear cache to force fresh data
-    dataLoadedRef.current = false // Reset to allow fresh load
-    loadingRef.current = false // Reset loading flag
     
     try {
-      loadingRef.current = true
       setLoading(true)
       console.log('🔄 Refreshing dashboard data...')
 
       const dashboardData = await getDashboardData()
 
-      if (mountedRef.current) {
-        setStats(dashboardData)
-        dataLoadedRef.current = true
-        console.log('✅ Dashboard data refreshed successfully')
-      }
+      setStats(dashboardData)
+      console.log('✅ Dashboard data refreshed successfully')
     } catch (error) {
       console.error('Dashboard data refresh failed:', error)
     } finally {
-      if (mountedRef.current) {
-        setLoading(false)
-      }
-      loadingRef.current = false
+      setLoading(false)
       setRefreshing(false)
     }
   }, [])
-
-  // Load data on mount - with duplicate prevention and proper cleanup
-  React.useEffect(() => {
-    mountedRef.current = true
-    
-    const loadData = async () => {
-      // Prevent duplicate calls
-      if (loadingRef.current || dataLoadedRef.current) {
-        // console.log('🔄 Dashboard data loading already in progress or completed, skipping...')
-        return
-      }
-
-      try {
-        loadingRef.current = true
-        setLoading(true)
-        // console.log('🔄 Loading dashboard data...')
-
-        // Use the new deduplicating function
-        const dashboardData = await getDashboardData()
-
-        // Only update state if component is still mounted
-        if (mountedRef.current) {
-          setStats(dashboardData)
-          dataLoadedRef.current = true
-          // console.log('✅ Dashboard data loaded successfully')
-        }
-      } catch (error) {
-        console.error('Dashboard data loading failed:', error)
-      } finally {
-        if (mountedRef.current) {
-          setLoading(false)
-        }
-        loadingRef.current = false
-      }
-    }
-    
-    loadData()
-
-    return () => {
-      mountedRef.current = false
-    }
-  }, []) // Empty dependency array
 
   // Calculate metrics based on time period
   const getMetricsForPeriod = () => {

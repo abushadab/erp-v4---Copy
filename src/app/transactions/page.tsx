@@ -250,15 +250,9 @@ export default function TransactionsPage() {
     }
   }
 
-  // Load initial data only once
+  // Load data on mount
   React.useEffect(() => {
-    console.log('🚀 useEffect triggered - mounting component')
-    
-    if (!initialLoadTriggered.current) {
-      console.log('✨ Initial load not triggered yet, calling loadTransactionsData')
-      initialLoadTriggered.current = true
-      loadTransactionsData()
-    }
+    loadTransactionsData()
   }, [])
 
   const refreshData = async () => {

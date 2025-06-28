@@ -28,7 +28,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { getPurchases, getPurchaseStats, getPurchaseReturns, type PurchaseWithItems, type PurchaseReturn } from "@/lib/supabase/purchases"
+import { getPurchases, getPurchaseStats, getPurchaseReturns, type PurchaseWithItems } from "@/lib/supabase/purchases"
+import { type PurchaseReturn } from "@/lib/supabase/purchases-types"
 import { toast } from "sonner"
 
 // Global cache and request deduplication for purchases page
@@ -112,25 +113,13 @@ export default function PurchasesPage() {
     }
   })
 
-  // Track component mount to prevent double execution
-  const mountedRef = React.useRef(false)
-  const loadingStateRef = React.useRef(false)
-
   // Global function to load purchases data with deduplication
   const loadPurchasesData = React.useCallback(async () => {
     console.log('🚀 loadPurchasesData called', {
-      mounted: mountedRef.current,
-      currentlyLoading: loadingStateRef.current,
       hasCache: !!purchasesPageCache,
       cacheValid: purchasesPageCache ? Date.now() - purchasesPageCache.timestamp < CACHE_DURATION : false,
       hasLoadingPromise: !!purchasesPageLoadingPromise
     })
-
-    // Prevent loading if already in progress
-    if (loadingStateRef.current) {
-      console.log('⚠️ Already loading, skipping...')
-      return
-    }
 
     // Check if we have valid cached data
     if (purchasesPageCache && Date.now() - purchasesPageCache.timestamp < CACHE_DURATION) {
@@ -152,7 +141,6 @@ export default function PurchasesPage() {
     if (purchasesPageLoadingPromise) {
       console.log('⏳ Purchases data already loading, waiting for result...')
       setIsLoadingWithLog(true)
-      loadingStateRef.current = true
       try {
         const result = await purchasesPageLoadingPromise
         setPurchases(result.enhancedPurchases)
@@ -162,7 +150,6 @@ export default function PurchasesPage() {
         console.error('❌ Error from existing loading promise:', error)
               } finally {
           setIsLoadingWithLog(false)
-          loadingStateRef.current = false
         }
       return
     }
@@ -170,7 +157,6 @@ export default function PurchasesPage() {
     // Start new loading request
     console.log('🔄 Loading fresh purchases data...')
     setIsLoadingWithLog(true)
-    loadingStateRef.current = true
 
     // Create loading promise with timeout protection
     purchasesPageLoadingPromise = Promise.race([
@@ -250,39 +236,19 @@ export default function PurchasesPage() {
       // Always cleanup the loading promise and state
       purchasesPageLoadingPromise = null
       setIsLoadingWithLog(false)
-      loadingStateRef.current = false
       console.log('🏁 Loading completed, cleanup done')
     }
   }, [])
 
-  // Load data on component mount with strict mode protection
+  // Load data on component mount
   React.useEffect(() => {
-    console.log('📍 useEffect triggered', { 
-      mounted: mountedRef.current,
-      isLoading: isLoading,
-      hasCache: !!purchasesPageCache,
-      strictMode: !mountedRef.current ? 'FIRST_MOUNT' : 'STRICT_MODE_SECOND_MOUNT'
-    })
-    
-    // Prevent double execution in React Strict Mode
-    if (mountedRef.current) {
-      console.log('⚠️ Strict Mode second mount detected, skipping...')
-      return
-    }
-    
-    mountedRef.current = true
-    
     // If we already have valid cached data, no need to load
     if (purchasesPageCache && Date.now() - purchasesPageCache.timestamp < CACHE_DURATION) {
-      console.log('⚡ Valid cache available, skipping data load')
       return
     }
     
-    console.log('🎯 First mount - triggering data load')
     loadPurchasesData()
   }, []) // Remove loadPurchasesData dependency to prevent re-execution
-
-
 
   // Helper functions for date presets
   const setDatePreset = (preset: string) => {

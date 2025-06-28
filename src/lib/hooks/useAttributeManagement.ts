@@ -175,7 +175,7 @@ export function useAttributeManagement() {
   }, [editForm])
 
   // API operations
-  const createNewAttribute = useCallback(async (onSuccess?: () => void) => {
+  const createNewAttribute = useCallback(async (onSuccess?: (attributeId: string) => void) => {
     const validation = validateCreateForm()
     if (!validation.isValid) {
       toast.error('Validation Error', {
@@ -222,7 +222,7 @@ export function useAttributeManagement() {
       })
 
       closeCreateModal()
-      onSuccess?.()
+      onSuccess?.(attributeResult.data.id)
     } catch (error) {
       console.error('Error creating attribute:', error)
       toast.error('Error', {

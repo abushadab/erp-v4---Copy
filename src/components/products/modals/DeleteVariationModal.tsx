@@ -11,7 +11,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import type { ProductVariation } from '@/lib/types'
 import type { 
   DatabaseAttribute, 
   DatabaseAttributeValue,
@@ -19,24 +18,42 @@ import type {
 } from '@/lib/hooks/useProductData'
 import { getAttributeName, getAttributeValueName } from '@/lib/utils/productTransforms'
 
+// Interface for the variation being deleted
+interface DeletingVariation {
+  id: string
+  sku: string
+  price: number
+  attributeValues: { [attributeId: string]: string }
+}
 interface DeleteVariationModalProps {
-  isOpen: boolean
-  onClose: () => void
-  variation: ProductVariation | null
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  variation?: DeletingVariation | null
   attributes: DatabaseAttribute[]
-  onConfirmDelete: () => void
+  onConfirm: () => void
+  isLoading: boolean
 }
 
 export function DeleteVariationModal({
-  isOpen,
-  onClose,
+  open,
+  onOpenChange,
   variation,
   attributes,
-  onConfirmDelete
+  onConfirm,
+  isLoading
 }: DeleteVariationModalProps) {
 
+  const handleConfirm = () => {
+    onConfirm()
+    onOpenChange(false)
+  }
+
+  const handleCancel = () => {
+    onOpenChange(false)
+  }
+
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Delete Variation</DialogTitle>
@@ -70,10 +87,20 @@ export function DeleteVariationModal({
         )}
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button
+            variant="outline"
+            onClick={handleCancel}
+            disabled={isLoading}
+            suppressHydrationWarning
+          >
             Cancel
           </Button>
-          <Button variant="destructive" onClick={onConfirmDelete}>
+          <Button
+            variant="destructive"
+            onClick={handleConfirm}
+            disabled={isLoading}
+            suppressHydrationWarning
+          >
             Delete Variation
           </Button>
         </DialogFooter>

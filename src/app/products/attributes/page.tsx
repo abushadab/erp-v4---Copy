@@ -192,32 +192,24 @@ export default function AttributesPage() {
     values: ['']
   })
 
-  // Deduplication cache and initial load tracker
-  const initialLoadTriggered = React.useRef(false)
-
-  // Load attributes on mount with deduplication
+  // Load data on mount
   React.useEffect(() => {
-    if (initialLoadTriggered.current) {
-      return
-    }
-    initialLoadTriggered.current = true
-
-    const loadAttributes = async () => {
-      try {
-        setIsLoading(true)
-        const attributesData = await getAllAttributes()
-        setAttributes(attributesData)
-        console.log('🎨 Loaded attributes from Supabase:', attributesData.length)
-      } catch (error) {
-        console.error('Error loading attributes:', error)
-        toast.error('Failed to load attributes')
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
     loadAttributes()
   }, [])
+
+  const loadAttributes = async () => {
+    try {
+      setIsLoading(true)
+      const attributesData = await getAllAttributes()
+      setAttributes(attributesData)
+      console.log('🎨 Loaded attributes from Supabase:', attributesData.length)
+    } catch (error) {
+      console.error('Error loading attributes:', error)
+      toast.error('Failed to load attributes')
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   const resetForm = () => {
     setForm({
